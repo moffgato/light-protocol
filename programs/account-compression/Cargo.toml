@@ -34,6 +34,7 @@ light-heap = { version = "1.0.0", path = "../../heap", optional = true }
 light-concurrent-merkle-tree = { version = "1.0.0", path = "../../merkle-tree/concurrent", features = ["solana"] }
 light-indexed-merkle-tree = { version = "1.0.0", path = "../../merkle-tree/indexed", features = ["solana"] }
 light-utils = { version = "1.0.0", path = "../../utils" }
+light-bloom-filter = { version = "0.1.0", path = "../../merkle-tree/bloom-filter", features = ["solana"] }
 num-bigint = "0.4"
 num-traits = "0.2.19"
 solana-security-txt = "1.1.0"

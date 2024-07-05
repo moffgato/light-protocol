@@ -19,6 +19,7 @@ dependencies = [
  "aligned-sized",
  "anchor-lang",
  "bytemuck",
+ "light-bloom-filter",
  "light-bounded-vec",
  "light-concurrent-merkle-tree",
  "light-hash-set",
