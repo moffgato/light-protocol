@@ -41,3 +41,6 @@ solana-security-txt = "1.1.0"
 
 [target.'cfg(not(target_os = "solana"))'.dependencies]
 solana-sdk = { workspace = true }
+
+[dev-dependencies]
+rand = "0.8.5"

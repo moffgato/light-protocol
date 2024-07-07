@@ -27,8 +27,10 @@ dependencies = [
  "light-heap",
  "light-indexed-merkle-tree",
  "light-utils",
+ "light-verifier",
  "num-bigint 0.4.6",
  "num-traits",
+ "rand 0.8.5",
  "solana-sdk",
  "solana-security-txt",
 ]

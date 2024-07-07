@@ -22,4 +22,6 @@ pub use rollover::*;
 pub mod group_authority;
 pub use group_authority::*;
 
-pub mod batched;
+pub mod batch;
+pub mod batched_merkle_tree;
+pub mod batched_queue;

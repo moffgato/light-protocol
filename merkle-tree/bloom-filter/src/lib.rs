@@ -1,34 +1,67 @@
+use std::f64::consts::LN_2;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum BloomFilterError {
     #[error("Bloom filter is full")]
     Full,
+    #[error("Invalid store capacity")]
+    InvalidStoreCapacity,
 }
 
-/// 15310 CU for 10 insertion
+#[cfg(feature = "solana")]
+impl From<BloomFilterError> for u32 {
+    fn from(e: BloomFilterError) -> u32 {
+        match e {
+            BloomFilterError::Full => 16001,
+            BloomFilterError::InvalidStoreCapacity => 16002,
+        }
+    }
+}
+
+#[cfg(feature = "solana")]
+impl From<BloomFilterError> for solana_program::program_error::ProgramError {
+    fn from(e: BloomFilterError) -> Self {
+        solana_program::program_error::ProgramError::Custom(e.into())
+    }
+}
+
+#[derive(Debug)]
 pub struct BloomFilter<'a> {
     pub num_iters: usize,
-    pub capacity: u128,
+    pub capacity: u64,
     pub store: &'a mut [u8],
 }
 
 impl<'a> BloomFilter<'a> {
-    // keep for possible use in tests
-    // use std::f64::consts::LN_2;
-    // pub fn calculate_bloom_filter_size(n: usize, p: f64) -> usize {
-    //     // m = - (n * ln(p)) / (ln(2)^2)
-    //     let m = -((n as f64) * p.ln()) / (LN_2 * LN_2);
-    //     m.ceil() as usize
-    // }
+    // TODO: find source for this
+    pub fn calculate_bloom_filter_size(n: usize, p: f64) -> usize {
+        let m = -((n as f64) * p.ln()) / (LN_2 * LN_2);
+        m.ceil() as usize
+    }
 
-    // pub fn calculate_optimal_hash_functions(n: usize, m: usize) -> usize {
-    //     // k = (m / n) * ln(2)
-    //     let k = (m as f64 / n as f64) * LN_2;
-    //     k.ceil() as usize
-    // }
+    pub fn calculate_optimal_hash_functions(n: usize, m: usize) -> usize {
+        let k = (m as f64 / n as f64) * LN_2;
+        k.ceil() as usize
+    }
 
-    pub fn probe_index_fast_murmur(value_bytes: &[u8], iteration: usize, capacity: &u128) -> usize {
+    pub fn new(
+        num_iters: usize,
+        capacity: u64,
+        store: &'a mut [u8],
+    ) -> Result<Self, BloomFilterError> {
+        // Capacity is in bits while store is in bytes.
+        if store.len() * 8 != capacity as usize {
+            return Err(BloomFilterError::InvalidStoreCapacity);
+        }
+        Ok(Self {
+            num_iters,
+            capacity,
+            store,
+        })
+    }
+
+    pub fn probe_index_fast_murmur(value_bytes: &[u8], iteration: usize, capacity: &u64) -> usize {
         let iter_bytes = iteration.to_le_bytes();
         let base_hash = fastmurmur3::hash(value_bytes);
         let mut combined_bytes = [0u8; 24];
@@ -36,11 +69,11 @@ impl<'a> BloomFilter<'a> {
         combined_bytes[16..].copy_from_slice(&iter_bytes);
 
         let combined_hash = fastmurmur3::hash(&combined_bytes);
-        (combined_hash % *capacity) as usize
+        (combined_hash % (*capacity as u128)) as usize
     }
 
-    pub fn insert(&mut self, value: &[u8; 32], insert: bool) -> Result<(), BloomFilterError> {
-        if self._insert(value, insert) {
+    pub fn insert(&mut self, value: &[u8; 32]) -> Result<(), BloomFilterError> {
+        if self._insert(value, true) {
             Ok(())
         } else {
             Err(BloomFilterError::Full)
@@ -84,14 +117,14 @@ mod test {
         let mut store = [0u8; 128_000];
         let mut bf = BloomFilter {
             num_iters: 3,
-            capacity: capacity as u128,
+            capacity,
             store: &mut store,
         };
 
         let value1 = [1u8; 32];
         let value2 = [2u8; 32];
 
-        bf.insert(&value1, true)?;
+        bf.insert(&value1)?;
         assert!(bf.contains(&value1));
         assert!(!bf.contains(&value2));
 
@@ -112,12 +145,17 @@ mod test {
         );
     }
 
+    /// Bench results:
+    /// - 15310 CU for 10 insertions with 3 hash functions
+    /// - capacity 5000 0.000_000_000_1 with 15 hash functions seems to not
+    ///   produce any collisions
     #[ignore = "bench"]
     #[test]
     fn bench_bloom_filter() {
-        let capacity = 500;
-        let bloom_filter_capacity = 20_000 * 8;
-        let optimal_hash_functions = 3;
+        let capacity = 5000;
+        let bloom_filter_capacity =
+            BloomFilter::calculate_bloom_filter_size(capacity, 0.000_000_000_1);
+        let optimal_hash_functions = 15;
         let iterations = 1_000_000;
         rnd_test(
             iterations,
@@ -148,7 +186,7 @@ mod test {
             let mut store = vec![0; bloom_filter_capacity];
             let mut bf = BloomFilter {
                 num_iters: optimal_hash_functions,
-                capacity: bloom_filter_capacity as u128,
+                capacity: bloom_filter_capacity as u64,
                 store: &mut store,
             };
             if j == 0 {
@@ -169,7 +207,7 @@ mod test {
                     _value
                 };
                 let value: [u8; 32] = bigint_to_be_bytes_array(&value).unwrap();
-                match bf.insert(&value, true) {
+                match bf.insert(&value) {
                     Ok(_) => {
                         assert!(bf.contains(&value));
                     }
@@ -181,7 +219,7 @@ mod test {
                     }
                 };
                 assert!(bf.contains(&value));
-                assert!(bf.insert(&value, true).is_err());
+                assert!(bf.insert(&value).is_err());
             }
         }
         if bench {
