@@ -44,7 +44,7 @@ async fn test_program_owned_merkle_tree() {
         system_cpi_test::ID,
     )]))
     .await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let payer_pubkey = payer.pubkey();
 
     let program_owned_merkle_tree_keypair = Keypair::new();

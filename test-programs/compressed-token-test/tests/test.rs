@@ -57,14 +57,14 @@ use spl_token::{error::TokenError, instruction::initialize_mint};
 #[tokio::test]
 async fn test_create_mint() {
     let (rpc, _) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     create_mint_helper(&rpc, &payer).await;
 }
 
 #[tokio::test]
 async fn test_failing_create_token_pool() {
     let (rpc, _) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
 
     let rent = rpc
         .get_minimum_balance_for_rent_exemption(Mint::LEN)
@@ -178,7 +178,7 @@ async fn test_failing_create_token_pool() {
 #[tokio::test]
 async fn test_wrapped_sol() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let native_mint = spl_token::native_mint::ID;
@@ -237,7 +237,7 @@ async fn test_wrapped_sol() {
 
 async fn test_mint_to(amounts: Vec<u64>, iterations: usize, lamports: Option<u64>) {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, false, false).await;
@@ -330,7 +330,7 @@ async fn test_mint_to_failing() {
     const MINTS: usize = 10;
 
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer_1 = rpc.get_payer().insecure_clone();
+    let payer_1 = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
 
     let mut rng = rand::thread_rng();
@@ -770,7 +770,7 @@ async fn test_8_transfer() {
 /// Transfers all tokens from inputs compressed accounts evenly distributed to outputs compressed accounts
 async fn perform_transfer_test(inputs: usize, outputs: usize, amount: u64) {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -819,7 +819,7 @@ async fn perform_transfer_test(inputs: usize, outputs: usize, amount: u64) {
 #[tokio::test]
 async fn test_decompression() {
     let (context, env) = setup_test_programs_with_accounts(None).await;
-    let payer = context.get_payer().insecure_clone();
+    let payer = context.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -884,7 +884,7 @@ async fn test_delegation(
     output_amounts_2: Vec<u64>,
 ) {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -1001,7 +1001,7 @@ async fn test_delegation_mixed() {
     let delegated_amount: u64 = 3000;
 
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -1224,7 +1224,7 @@ async fn test_delegation_max() {
 #[tokio::test]
 async fn test_approve_failing() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -1281,8 +1281,9 @@ async fn test_approve_failing() {
     {
         let invalid_delegated_merkle_tree = Keypair::new();
 
+        let fee_payer = rpc.get_payer().await;
         let inputs = CreateApproveInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: fee_payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1307,7 +1308,7 @@ async fn test_approve_failing() {
             proof: proof_rpc_result.proof.clone(),
         };
         let instruction = create_approve_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1328,8 +1329,9 @@ async fn test_approve_failing() {
     {
         let invalid_change_merkle_tree = Keypair::new();
 
+        let payer = rpc.get_payer().await;
         let inputs = CreateApproveInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1354,7 +1356,7 @@ async fn test_approve_failing() {
             proof: proof_rpc_result.proof.clone(),
         };
         let instruction = create_approve_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1379,8 +1381,9 @@ async fn test_approve_failing() {
             c: [0; 32],
         };
 
+        let payer = rpc.get_payer().await;
         let inputs = CreateApproveInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1405,7 +1408,7 @@ async fn test_approve_failing() {
             proof: invalid_proof,
         };
         let instruction = create_approve_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1419,8 +1422,9 @@ async fn test_approve_failing() {
     {
         let invalid_mint = Keypair::new();
 
+        let fee_payer = rpc.get_payer().await;
         let inputs = CreateApproveInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: fee_payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1445,7 +1449,7 @@ async fn test_approve_failing() {
             proof: proof_rpc_result.proof.clone(),
         };
         let instruction = create_approve_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1462,8 +1466,9 @@ async fn test_approve_failing() {
             .map(|x| x.token_data.amount)
             .sum::<u64>();
         let delegated_amount = sum_inputs + 1;
+        let fee_payer = rpc.get_payer().await;
         let inputs = CreateApproveInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: fee_payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1488,7 +1493,7 @@ async fn test_approve_failing() {
             proof: proof_rpc_result.proof.clone(),
         };
         let instruction = create_approve_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1505,7 +1510,7 @@ async fn test_approve_failing() {
 /// 2. Revoke
 async fn test_revoke(num_inputs: usize, mint_amount: u64, delegated_amount: u64) {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -1615,7 +1620,7 @@ async fn test_revoke_max() {
 #[tokio::test]
 async fn test_revoke_failing() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -1695,8 +1700,9 @@ async fn test_revoke_failing() {
     {
         let invalid_root_indices = vec![0];
 
+        let fee_payer = rpc.get_payer().await;
         let inputs = CreateRevokeInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: fee_payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1717,7 +1723,7 @@ async fn test_revoke_failing() {
             proof: proof_rpc_result.proof.clone(),
         };
         let instruction = create_revoke_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1731,8 +1737,9 @@ async fn test_revoke_failing() {
     {
         let invalid_merkle_tree = Keypair::new();
 
+        let fee_payer = rpc.get_payer().await;
         let inputs = CreateRevokeInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: fee_payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1753,7 +1760,7 @@ async fn test_revoke_failing() {
             proof: proof_rpc_result.proof.clone(),
         };
         let instruction = create_revoke_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
 
         let result = rpc
             .create_and_send_transaction(
@@ -1775,9 +1782,9 @@ async fn test_revoke_failing() {
     // 3. Invalid mint.
     {
         let invalid_mint = Keypair::new();
-
+        let fee_payer = rpc.get_payer().await;
         let inputs = CreateRevokeInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: fee_payer.pubkey(),
             authority: sender.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -1798,7 +1805,7 @@ async fn test_revoke_failing() {
             proof: proof_rpc_result.proof,
         };
         let instruction = create_revoke_instruction(inputs).unwrap();
-        let context_payer = rpc.get_payer().insecure_clone();
+        let context_payer = rpc.get_payer().await;
         let result = rpc
             .create_and_send_transaction(
                 &[instruction],
@@ -1817,7 +1824,7 @@ async fn test_revoke_failing() {
 #[tokio::test]
 async fn test_burn() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -1950,7 +1957,7 @@ async fn test_burn() {
 #[tokio::test]
 async fn failing_tests_burn() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -2179,7 +2186,7 @@ async fn failing_tests_burn() {
 /// 5. Thaw delegated tokens
 async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -2335,7 +2342,7 @@ async fn test_freeze_and_thaw_10000() {
 #[tokio::test]
 async fn test_failing_freeze() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -2386,14 +2393,14 @@ async fn test_failing_freeze() {
             &rpc,
         )
         .await;
-    let context_payer = rpc.get_payer().insecure_clone();
+    let context_payer = rpc.get_payer().await;
 
     // 1. Invalid authority.
     {
         let invalid_authority = Keypair::new();
 
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: invalid_authority.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2427,7 +2434,7 @@ async fn test_failing_freeze() {
         let invalid_merkle_tree = Keypair::new();
 
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: payer.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2468,7 +2475,7 @@ async fn test_failing_freeze() {
         };
 
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: payer.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2535,7 +2542,7 @@ async fn test_failing_freeze() {
             )
             .await;
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: payer.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2570,7 +2577,7 @@ async fn test_failing_freeze() {
 #[tokio::test]
 async fn test_failing_thaw() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -2647,14 +2654,14 @@ async fn test_failing_thaw() {
             &rpc,
         )
         .await;
-    let context_payer = rpc.get_payer().insecure_clone();
+    let context_payer = rpc.get_payer().await;
 
     // 1. Invalid authority.
     {
         let invalid_authority = Keypair::new();
 
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: invalid_authority.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2688,7 +2695,7 @@ async fn test_failing_thaw() {
         let invalid_merkle_tree = Keypair::new();
 
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: payer.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2729,7 +2736,7 @@ async fn test_failing_thaw() {
         };
 
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: payer.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2787,7 +2794,7 @@ async fn test_failing_thaw() {
             )
             .await;
         let inputs = CreateInstructionInputs {
-            fee_payer: rpc.get_payer().pubkey(),
+            fee_payer: context_payer.pubkey(),
             authority: payer.pubkey(),
             input_merkle_contexts: input_compressed_accounts
                 .iter()
@@ -2827,7 +2834,7 @@ async fn test_failing_thaw() {
 #[tokio::test]
 async fn test_failing_decompression() {
     let (context, env) = setup_test_programs_with_accounts(None).await;
-    let payer = context.get_payer().insecure_clone();
+    let payer = context.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
@@ -3138,8 +3145,9 @@ pub async fn failing_compress_decompress<R: RpcConnection>(
     } else {
         (Vec::new(), None)
     };
+    let fee_payer = rpc.get_payer().await;
     let instruction = create_transfer_instruction(
-        &rpc.get_payer().pubkey(),
+        &fee_payer.pubkey(),
         &payer.pubkey(),
         &input_compressed_accounts
             .iter()
@@ -3186,7 +3194,7 @@ pub async fn failing_compress_decompress<R: RpcConnection>(
         ]
     };
 
-    let context_payer = rpc.get_payer().insecure_clone();
+    let context_payer = rpc.get_payer().await;
     let result = rpc
         .create_and_send_transaction(
             &instructions,
@@ -3220,7 +3228,7 @@ pub async fn failing_compress_decompress<R: RpcConnection>(
 #[tokio::test]
 async fn test_invalid_inputs() {
     let (rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let nullifier_queue_pubkey = env.nullifier_queue_pubkey;
     let test_indexer =
@@ -3477,7 +3485,7 @@ async fn test_invalid_inputs() {
     }
     // Test 7: invalid owner
     {
-        let invalid_payer = rpc.get_payer().insecure_clone();
+        let invalid_payer = rpc.get_payer().await;
         let res = perform_transfer_failing_test(
             &rpc,
             change_out_compressed_account_0,

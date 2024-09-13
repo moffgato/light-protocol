@@ -33,7 +33,7 @@ async fn test_name_service() {
         name_service::ID,
     )]))
     .await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
 
     let mut test_indexer: TestIndexer<ProgramTestRpcConnection> = TestIndexer::new(
         &[StateMerkleTreeAccounts {
