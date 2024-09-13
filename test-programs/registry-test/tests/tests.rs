@@ -1006,7 +1006,7 @@ async fn failing_test_forester() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn update_forester_on_testnet() {
     let env_accounts = get_test_env_accounts();
-    let mut rpc = SolanaRpcConnection::new(SolanaRpcUrl::ZKTestnet, None);
+    let rpc = SolanaRpcConnection::new(SolanaRpcUrl::ZKTestnet, None);
     rpc.airdrop_lamports(&env_accounts.forester.pubkey(), LAMPORTS_PER_SOL * 100)
         .await
         .unwrap();
