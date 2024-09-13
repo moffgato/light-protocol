@@ -480,11 +480,11 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
 /// 3. Create a compressed account and address in program owned state and address Merkle trees
 #[tokio::test]
 async fn test_create_pda_in_program_owned_merkle_trees() {
-    let (mut rpc, env) =
+    let (rpc, env) =
         setup_test_programs_with_accounts(Some(vec![(String::from("system_cpi_test"), ID)])).await;
 
     let payer = rpc.get_payer().await;
-    let mut test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
+    let test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
     // Failing test 1 invalid address Merkle tree ----------------------------------------------
     let program_owned_address_merkle_tree_keypair = Keypair::new();
     let program_owned_address_queue_keypair = Keypair::new();

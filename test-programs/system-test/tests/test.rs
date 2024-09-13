@@ -79,7 +79,7 @@ use tokio::sync::RwLock;
 /// 6.2 invalid queue account (AccountDiscriminatorMismatch)
 #[tokio::test]
 async fn invoke_failing_test() {
-    let (mut context, env) = setup_test_programs_with_accounts(None).await;
+    let (context, env) = setup_test_programs_with_accounts(None).await;
 
     let payer = context.get_payer().await;
     // no inputs
@@ -95,7 +95,7 @@ async fn invoke_failing_test() {
         false,
     );
     create_instruction_and_failing_transaction(
-        &mut context,
+        &context,
         &payer,
         inputs_struct,
         remaining_accounts,
@@ -104,7 +104,7 @@ async fn invoke_failing_test() {
     .await
     .unwrap();
 
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, true).await;
     // circuit instantiations allow for 1, 2, 3, 4, 8 inclusion proofs
     let options = [0usize, 1usize, 2usize, 3usize, 4usize, 8usize];
@@ -117,8 +117,8 @@ async fn invoke_failing_test() {
             }
             for num_outputs in 1..8 {
                 failing_transaction_inputs(
-                    &mut context,
-                    &mut test_indexer,
+                    &context,
+                    &test_indexer,
                     &payer,
                     &env,
                     options[j],
@@ -140,8 +140,8 @@ async fn invoke_failing_test() {
             }
             for num_outputs in 0..8 {
                 failing_transaction_inputs(
-                    &mut context,
-                    &mut test_indexer,
+                    &context,
+                    &test_indexer,
                     &payer,
                     &env,
                     options[j],
@@ -159,8 +159,8 @@ async fn invoke_failing_test() {
 
 #[allow(clippy::too_many_arguments)]
 pub async fn failing_transaction_inputs(
-    context: &mut ProgramTestRpcConnection,
-    test_indexer: &mut TestIndexer<ProgramTestRpcConnection>,
+    context: &ProgramTestRpcConnection,
+    test_indexer: &TestIndexer<ProgramTestRpcConnection>,
     payer: &Keypair,
     env: &EnvAccounts,
     num_inputs: usize,
@@ -315,7 +315,7 @@ pub async fn failing_transaction_inputs(
 }
 
 pub async fn failing_transaction_inputs_inner(
-    context: &mut ProgramTestRpcConnection,
+    context: &ProgramTestRpcConnection,
     payer: &Keypair,
     env: &EnvAccounts,
     inputs_struct: &InstructionDataInvoke,
@@ -575,7 +575,7 @@ fn create_address_test_inputs(
 }
 
 pub async fn failing_transaction_address(
-    context: &mut ProgramTestRpcConnection,
+    context: &ProgramTestRpcConnection,
     payer: &Keypair,
     env: &EnvAccounts,
     inputs_struct: &InstructionDataInvoke,
@@ -695,7 +695,7 @@ pub async fn failing_transaction_address(
 /// 3. invalid output Merkle tree
 /// 4. address that doesn't exist
 pub async fn failing_transaction_output(
-    context: &mut ProgramTestRpcConnection,
+    context: &ProgramTestRpcConnection,
     payer: &Keypair,
     env: &EnvAccounts,
     inputs_struct: InstructionDataInvoke,
@@ -803,7 +803,7 @@ pub async fn failing_transaction_output(
 }
 
 pub async fn perform_tx_with_output_compressed_accounts(
-    context: &mut ProgramTestRpcConnection,
+    context: &ProgramTestRpcConnection,
     payer: &Keypair,
     payer_pubkey: Pubkey,
     output_compressed_accounts: Vec<CompressedAccount>,
@@ -832,7 +832,7 @@ pub async fn perform_tx_with_output_compressed_accounts(
 }
 
 pub async fn create_instruction_and_failing_transaction(
-    context: &mut ProgramTestRpcConnection,
+    context: &ProgramTestRpcConnection,
     payer: &Keypair,
     inputs_struct: InstructionDataInvoke,
     remaining_accounts: Vec<AccountMeta>,
