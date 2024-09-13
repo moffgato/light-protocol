@@ -81,7 +81,7 @@ use tokio::sync::RwLock;
 async fn invoke_failing_test() {
     let (mut context, env) = setup_test_programs_with_accounts(None).await;
 
-    let payer = context.get_payer().insecure_clone();
+    let payer = context.get_payer().await;
     // no inputs
     let (remaining_accounts, inputs_struct) = create_invoke_instruction_data_and_remaining_accounts(
         &Vec::new(),
@@ -186,7 +186,7 @@ pub async fn failing_transaction_inputs(
     let (mut new_address_params, derived_addresses) =
         create_address_test_inputs(env, num_addresses);
     let input_compressed_accounts =
-        test_indexer.get_compressed_accounts_by_owner(&payer.pubkey())[0..num_inputs].to_vec();
+        test_indexer.get_compressed_accounts_by_owner(&payer.pubkey()).await[0..num_inputs].to_vec();
     let hashes = input_compressed_accounts
         .iter()
         .map(|x| x.hash().unwrap())
@@ -558,7 +558,7 @@ fn create_address_test_inputs(
 
     let mut new_address_params = vec![];
     let mut derived_addresses = Vec::new();
-    for (_, address_seed) in address_seeds.iter().enumerate() {
+    for address_seed in address_seeds.iter() {
         new_address_params.push(NewAddressParams {
             seed: *address_seed,
             address_queue_pubkey: env.address_merkle_tree_queue_pubkey,
@@ -882,10 +882,10 @@ pub async fn create_instruction_and_failing_transaction(
 /// 4. should succeed: in compressed account inserted in (1.) and valid zkp
 #[tokio::test]
 async fn invoke_test() {
-    let (mut context, env) = setup_test_programs_with_accounts(None).await;
+    let (context, env) = setup_test_programs_with_accounts(None).await;
 
-    let payer = context.get_payer().insecure_clone();
-    let mut test_indexer =
+    let payer = context.get_payer().await;
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, true).await;
 
     let payer_pubkey = payer.pubkey();
@@ -931,7 +931,7 @@ async fn invoke_test() {
         .await
         .unwrap()
         .unwrap();
-    let (created_compressed_accounts, _) = test_indexer.add_event_and_compressed_accounts(&event.0);
+    let (created_compressed_accounts, _) = test_indexer.add_event_and_compressed_accounts(&event.0).await;
     assert_created_compressed_accounts(
         output_compressed_accounts.as_slice(),
         output_merkle_tree_pubkeys.as_slice(),
@@ -1025,7 +1025,7 @@ async fn invoke_test() {
                 .merkle_tree_pubkey]),
             None,
             None,
-            &mut context,
+            &context,
         )
         .await;
     let input_compressed_accounts = vec![compressed_account_with_context.compressed_account];
@@ -1067,7 +1067,7 @@ async fn invoke_test() {
         .await
         .unwrap()
         .unwrap();
-    test_indexer.add_event_and_compressed_accounts(&event.0);
+    test_indexer.add_event_and_compressed_accounts(&event.0).await;
 
     println!("Double spend -------------------------");
     let output_compressed_accounts = vec![CompressedAccount {
@@ -1143,9 +1143,9 @@ async fn invoke_test() {
 ///    testing: (input accounts, new addresses) (1, 1), (1, 2), (2, 1), (2, 2)
 #[tokio::test]
 async fn test_with_address() {
-    let (mut context, env) = setup_test_programs_with_accounts(None).await;
-    let payer = context.get_payer().insecure_clone();
-    let mut test_indexer =
+    let (context, env) = setup_test_programs_with_accounts(None).await;
+    let payer = context.get_payer().await;
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, true).await;
 
     let payer_pubkey = payer.pubkey();
@@ -1187,8 +1187,8 @@ async fn test_with_address() {
     assert_custom_error_or_program_error(res, SystemProgramError::InvalidAddress.into()).unwrap();
     println!("creating address -------------------------");
     create_addresses_test(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &[env.address_merkle_tree_pubkey],
         &[env.address_merkle_tree_queue_pubkey],
         vec![env.merkle_tree_pubkey],
@@ -1206,8 +1206,8 @@ async fn test_with_address() {
     let compressed_account_with_context = indexer_state.compressed_accounts[0].clone();
     let recipient_pubkey = Keypair::new().pubkey();
     transfer_compressed_sol_test(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &payer,
         &[compressed_account_with_context.clone()],
         &[recipient_pubkey],
@@ -1236,8 +1236,8 @@ async fn test_with_address() {
     let address_seed_2 = [2u8; 32];
 
     let event = create_addresses_test(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &[
             env.address_merkle_tree_pubkey,
             env.address_merkle_tree_pubkey,
@@ -1266,8 +1266,8 @@ async fn test_with_address() {
 
     let address_seed_3 = [3u8; 32];
     create_addresses_test(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &[
             env.address_merkle_tree_pubkey,
             env.address_merkle_tree_pubkey,
@@ -1299,7 +1299,7 @@ async fn test_with_address() {
     ];
     for (n_input_compressed_accounts, n_new_addresses) in test_inputs {
         let compressed_input_accounts = test_indexer
-            .get_compressed_accounts_by_owner(&payer_pubkey)[0..n_input_compressed_accounts]
+            .get_compressed_accounts_by_owner(&payer_pubkey).await[0..n_input_compressed_accounts]
             .to_vec();
         let mut address_vec = Vec::new();
         // creates multiple seeds by taking the number of input accounts and zeroing out the jth byte
@@ -1310,8 +1310,8 @@ async fn test_with_address() {
         }
 
         create_addresses_test(
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             &vec![env.address_merkle_tree_pubkey; n_new_addresses],
             &vec![env.address_merkle_tree_queue_pubkey; n_new_addresses],
             vec![env.merkle_tree_pubkey; n_new_addresses],
@@ -1327,14 +1327,14 @@ async fn test_with_address() {
 
 #[tokio::test]
 async fn test_with_compression() {
-    let (mut context, env) = setup_test_programs_with_accounts(None).await;
-    let payer = context.get_payer().insecure_clone();
+    let (context, env) = setup_test_programs_with_accounts(None).await;
+    let payer = context.get_payer().await;
 
     let payer_pubkey = payer.pubkey();
 
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let nullifier_queue_pubkey = env.nullifier_queue_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let compress_amount = 1_000_000;
     let output_compressed_accounts = vec![CompressedAccount {
@@ -1433,7 +1433,7 @@ async fn test_with_compression() {
                 .merkle_tree_pubkey]),
             None,
             None,
-            &mut context,
+            &context,
         )
         .await;
     let input_compressed_accounts =
@@ -1480,10 +1480,10 @@ async fn test_with_compression() {
         .unwrap();
 
     let compressed_account_with_context =
-        test_indexer.get_compressed_accounts_by_owner(&payer_pubkey)[0].clone();
+        test_indexer.get_compressed_accounts_by_owner(&payer_pubkey).await[0].clone();
     decompress_sol_test(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &payer,
         &vec![compressed_account_with_context],
         &recipient_pubkey,
@@ -1511,25 +1511,25 @@ async fn regenerate_accounts() {
 
     let context = setup_test_programs(None).await;
     let context = Arc::new(RwLock::new(context));
-    let mut context = ProgramTestRpcConnection { context };
+    let context = ProgramTestRpcConnection { context };
     let mut keypairs = EnvAccountKeypairs::from_target_folder();
     keypairs.governance_authority = Keypair::from_bytes(&PAYER_KEYPAIR).unwrap();
     keypairs.forester = Keypair::from_bytes(&FORESTER_TEST_KEYPAIR).unwrap();
     airdrop_lamports(
-        &mut context,
+        &context,
         &keypairs.governance_authority.pubkey(),
         100_000_000_000,
     )
     .await
     .unwrap();
     // let forester = Keypair::from_bytes(&FORESTER_TEST_KEYPAIR).unwrap();
-    airdrop_lamports(&mut context, &keypairs.forester.pubkey(), 10_000_000_000)
+    airdrop_lamports(&context, &keypairs.forester.pubkey(), 10_000_000_000)
         .await
         .unwrap();
     // Note this will not regenerate the registered program accounts.
     let skip_register_programs = true;
     let env = initialize_accounts(
-        &mut context,
+        &context,
         keypairs,
         protocol_config,
         true,
