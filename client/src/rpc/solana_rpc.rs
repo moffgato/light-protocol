@@ -73,8 +73,9 @@ impl SolanaRpcConnection {
         url: U,
         commitment_config: Option<CommitmentConfig>,
         retry_config: Option<RetryConfig>,
+        payer: Option<Keypair>,
     ) -> Self {
-        let payer = Keypair::new();
+        let payer = payer.unwrap_or(Keypair::new());
         let commitment_config = commitment_config.unwrap_or(CommitmentConfig::confirmed());
         let client = RpcClient::new_with_commitment(url.to_string(), commitment_config);
         let retry_config = retry_config.unwrap_or_default();
@@ -184,7 +185,7 @@ impl RpcConnection for SolanaRpcConnection {
     where
         Self: Sized,
     {
-        Self::new_with_retry(url, commitment_config, None)
+        Self::new_with_retry(url, commitment_config, None, None)
     }
 
     async fn get_payer(&self) -> Keypair {

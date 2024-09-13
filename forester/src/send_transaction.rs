@@ -71,7 +71,7 @@ const LATENCY: Duration = Duration::from_millis(4 * 500);
 ///
 /// TODO:
 /// - return number of sent transactions
-/// - test timeout for any action of this function or subfunctions, timeout is
+/// - test timeout for any action of this function or sub-functions, timeout is
 ///   end of slot
 /// - consider dynamic batch size based on the number of transactions in the
 ///   queue
@@ -84,7 +84,7 @@ pub async fn send_batched_transactions<T: TransactionBuilder, R: RpcConnection>(
 ) -> Result<usize> {
     let start_time = Instant::now();
 
-    let mut rpc = pool.get_connection().await?;
+    let rpc = pool.get_connection().await?;
     let mut num_batches = 0;
     let mut num_sent_transactions: usize = 0;
     // 1. Execute batches until max number of batches is reached or light slot
@@ -108,7 +108,7 @@ pub async fn send_batched_transactions<T: TransactionBuilder, R: RpcConnection>(
             config.queue_config.address_queue_length
         };
         let queue_item_data = fetch_queue_item_data(
-            &mut *rpc,
+            &*rpc,
             &tree_accounts.queue,
             start_index,
             length,
@@ -132,7 +132,7 @@ pub async fn send_batched_transactions<T: TransactionBuilder, R: RpcConnection>(
         }
 
         // 4. Fetch recent blockhash.
-        // A recent blockhash is valid for 2 mins we only need one per batch. We
+        // A recent blockhash is valid for 1 min we only need one per batch. We
         // use a new one per batch in case that we want to retry these same
         // transactions and identical transactions might be dropped.
         let recent_blockhash = rpc.get_latest_blockhash().await?;

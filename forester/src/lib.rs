@@ -39,7 +39,7 @@ pub async fn run_queue_info(
     trees: Vec<TreeAccounts>,
     queue_type: TreeType,
 ) {
-    let mut rpc = SolanaRpcConnection::new(config.external_services.rpc_url.to_string(), None);
+    let rpc = SolanaRpcConnection::new(config.external_services.rpc_url.to_string(), None);
     let trees: Vec<_> = trees
         .iter()
         .filter(|t| t.tree_type == queue_type)
@@ -53,7 +53,7 @@ pub async fn run_queue_info(
             ADDRESS_QUEUE_VALUES
         };
 
-        let queue_length = fetch_queue_item_data(&mut rpc, &tree_data.queue, 0, length, length)
+        let queue_length = fetch_queue_item_data(&rpc, &tree_data.queue, 0, length, length)
             .await
             .unwrap()
             .len();
@@ -82,8 +82,8 @@ pub async fn run_pipeline<R: RpcConnection, I: Indexer<R> + 'static>(
     .map_err(|e| ForesterError::Custom(e.to_string()))?;
 
     let protocol_config = {
-        let mut rpc = rpc_pool.get_connection().await?;
-        get_protocol_config(&mut *rpc).await
+        let rpc = rpc_pool.get_connection().await?;
+        get_protocol_config(&*rpc).await
     };
 
     let arc_pool = Arc::new(rpc_pool);
@@ -100,11 +100,11 @@ pub async fn run_pipeline<R: RpcConnection, I: Indexer<R> + 'static>(
     let arc_slot_tracker = Arc::new(slot_tracker);
     let arc_slot_tracker_clone = arc_slot_tracker.clone();
     tokio::spawn(async move {
-        let mut rpc = arc_pool_clone
+        let rpc = arc_pool_clone
             .get_connection()
             .await
             .expect("Failed to get RPC connection");
-        SlotTracker::run(arc_slot_tracker_clone, &mut *rpc).await;
+        SlotTracker::run(arc_slot_tracker_clone, &*rpc).await;
     });
 
     debug!("Starting Forester pipeline");

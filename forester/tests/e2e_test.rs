@@ -55,8 +55,12 @@ async fn test_epoch_monitor_with_test_indexer_and_1_forester() {
     .await
     .unwrap();
 
-    let mut rpc = SolanaRpcConnection::new(SolanaRpcUrl::Localnet, None);
-    rpc.payer = forester_keypair.insecure_clone();
+    let rpc = SolanaRpcConnection::new_with_retry(
+        SolanaRpcUrl::Localnet,
+        None,
+        None,
+        Some(forester_keypair.insecure_clone()),
+    );
 
     rpc.airdrop_lamports(&forester_keypair.pubkey(), LAMPORTS_PER_SOL * 100_000)
         .await
@@ -70,7 +74,7 @@ async fn test_epoch_monitor_with_test_indexer_and_1_forester() {
     .unwrap();
 
     register_test_forester(
-        &mut rpc,
+        &rpc,
         &env_accounts.governance_authority,
         &forester_keypair.pubkey(),
         light_registry::ForesterConfig::default(),
@@ -204,9 +208,9 @@ pub async fn assert_queue_len(
     not_empty: bool,
 ) {
     for tree in state_trees.iter() {
-        let mut rpc = pool.get_connection().await.unwrap();
+        let rpc = pool.get_connection().await.unwrap();
         let queue_length = fetch_queue_item_data(
-            &mut *rpc,
+            &*rpc,
             &tree.nullifier_queue,
             0,
             STATE_NULLIFIER_QUEUE_VALUES,
@@ -224,9 +228,9 @@ pub async fn assert_queue_len(
     }
 
     for tree in address_trees.iter() {
-        let mut rpc = pool.get_connection().await.unwrap();
+        let rpc = pool.get_connection().await.unwrap();
         let queue_length = fetch_queue_item_data(
-            &mut *rpc,
+            &*rpc,
             &tree.queue,
             0,
             ADDRESS_QUEUE_VALUES,
@@ -277,8 +281,12 @@ async fn test_epoch_monitor_with_2_foresters() {
     .await
     .unwrap();
 
-    let mut rpc = SolanaRpcConnection::new(SolanaRpcUrl::Localnet, None);
-    rpc.payer = forester_keypair1.insecure_clone();
+    let rpc = SolanaRpcConnection::new_with_retry(
+        SolanaRpcUrl::Localnet,
+        None,
+        None,
+        Some(forester_keypair1.insecure_clone()),
+    );
 
     // Airdrop to both foresters and governance authority
     for keypair in [
@@ -294,7 +302,7 @@ async fn test_epoch_monitor_with_2_foresters() {
     // Register both foresters
     for forester_keypair in [&forester_keypair1, &forester_keypair2] {
         register_test_forester(
-            &mut rpc,
+            &rpc,
             &env_accounts.governance_authority,
             &forester_keypair.pubkey(),
             light_registry::ForesterConfig::default(),
@@ -455,7 +463,7 @@ async fn test_epoch_monitor_with_2_foresters() {
     .await;
     // assert queues have been emptied
     assert_queue_len(&pool, &state_trees, &address_trees, &mut 0, 0, false).await;
-    let mut rpc = pool.get_connection().await.unwrap();
+    let rpc = pool.get_connection().await.unwrap();
     let forester_pubkeys = [
         config1.payer_keypair.pubkey(),
         config2.payer_keypair.pubkey(),
@@ -464,10 +472,9 @@ async fn test_epoch_monitor_with_2_foresters() {
     // assert that foresters registered for epoch 1 and 2 (no new work is emitted after epoch 0)
     // Assert that foresters have registered all processed epochs and the next epoch (+1)
     for epoch in 0..=EXPECTED_EPOCHS {
-        let total_processed_work =
-            assert_foresters_registered(&forester_pubkeys[..], &mut rpc, epoch)
-                .await
-                .unwrap();
+        let total_processed_work = assert_foresters_registered(&forester_pubkeys[..], &rpc, epoch)
+            .await
+            .unwrap();
         if epoch == 0 {
             assert_eq!(
                 total_processed_work, total_expected_work,
@@ -524,7 +531,7 @@ pub async fn assert_trees_are_rollledover(
 }
 async fn assert_foresters_registered(
     foresters: &[Pubkey],
-    rpc: &mut SolanaRpcConnection,
+    rpc: &SolanaRpcConnection,
     epoch: u64,
 ) -> Result<u64, RpcError> {
     let mut performed_work = 0;
@@ -582,8 +589,12 @@ async fn test_epoch_double_registration() {
     .await
     .unwrap();
 
-    let mut rpc = SolanaRpcConnection::new(SolanaRpcUrl::Localnet, None);
-    rpc.payer = forester_keypair.insecure_clone();
+    let rpc = SolanaRpcConnection::new_with_retry(
+        SolanaRpcUrl::Localnet,
+        None,
+        None,
+        Some(forester_keypair.insecure_clone()),
+    );
 
     rpc.airdrop_lamports(&forester_keypair.pubkey(), LAMPORTS_PER_SOL * 100_000)
         .await
@@ -597,7 +608,7 @@ async fn test_epoch_double_registration() {
     .unwrap();
 
     register_test_forester(
-        &mut rpc,
+        &rpc,
         &env_accounts.governance_authority,
         &forester_keypair.pubkey(),
         light_registry::ForesterConfig::default(),
@@ -631,8 +642,8 @@ async fn test_epoch_double_registration() {
         assert!(result.is_ok(), "Registration should succeed");
     }
 
-    let mut rpc = pool.get_connection().await.unwrap();
-    let protocol_config = get_protocol_config(&mut *rpc).await;
+    let rpc = pool.get_connection().await.unwrap();
+    let protocol_config = get_protocol_config(&*rpc).await;
     let solana_slot = rpc.get_slot().await.unwrap();
     let current_epoch = protocol_config.get_current_epoch(solana_slot);
 
