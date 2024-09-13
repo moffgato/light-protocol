@@ -195,7 +195,9 @@ pub async fn perform_escrow_with_event<R: RpcConnection>(
             }),
         )
         .await?;
-    test_indexer.add_compressed_accounts_with_token_data(&event.unwrap().0);
+    test_indexer
+        .add_compressed_accounts_with_token_data(&event.unwrap().0)
+        .await;
     Ok(())
 }
 
@@ -365,7 +367,9 @@ pub async fn perform_withdrawal_with_event<R: RpcConnection>(
             None,
         )
         .await?;
-    test_indexer.add_compressed_accounts_with_token_data(&event.unwrap().0);
+    test_indexer
+        .add_compressed_accounts_with_token_data(&event.unwrap().0)
+        .await;
     Ok(())
 }
 
