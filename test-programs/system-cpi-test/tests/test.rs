@@ -134,10 +134,11 @@ async fn only_test_create_pda() {
     )
     .await;
 
-    let compressed_account = test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await
-        [0]
-    .compressed_account
-    .clone();
+    let compressed_account = test_indexer
+        .get_compressed_token_accounts_by_owner(&payer.pubkey())
+        .await[0]
+        .compressed_account
+        .clone();
     // Failing 4 input account that is not owned by signer ----------------------------------------------
     perform_with_input_accounts(
         &test_indexer,
@@ -152,7 +153,8 @@ async fn only_test_create_pda() {
     .await
     .unwrap();
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+        let compressed_account =
+            test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         // Failing 5 provide cpi context but no cpi context account ----------------------------------------------
         perform_with_input_accounts(
             &test_indexer,
@@ -205,8 +207,10 @@ async fn only_test_create_pda() {
         )
         .await
         .unwrap();
-        let compressed_token_account_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_token_account_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         // Failing 10 provide cpi context account but cpi context has a different proof ----------------------------------------------
         perform_with_input_accounts(
             &test_indexer,
@@ -242,7 +246,8 @@ async fn only_test_create_pda() {
                 26, 211, 193, 195, 11, 219, 9, 155, 58, 172, 58, 200, 254, 75, 231, 106, 31, 168,
                 183, 76, 179, 113, 234, 101, 191, 99, 156, 98,
             ];
-            let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+            let compressed_account =
+                test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
             let keypair = Keypair::from_bytes(&CPI_SYSTEM_TEST_PROGRAM_ID_KEYPAIR).unwrap();
             let result = transfer_compressed_sol_test(
                 &rpc,
@@ -319,13 +324,18 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
     .unwrap();
     let delegate = Keypair::new();
 
-    let ref_compressed_token_data =
-        test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+    let ref_compressed_token_data = test_indexer
+        .get_compressed_token_accounts_by_owner(&payer.pubkey())
+        .await[0]
+        .clone();
     // 1. Approve functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_account =
+            test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         perform_with_input_accounts(
             &test_indexer,
             &rpc,
@@ -338,8 +348,10 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         )
         .await
         .unwrap();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         let mut ref_data = ref_compressed_token_data.token_data.clone();
         ref_data.delegate = Some(delegate.pubkey());
         assert_eq!(compressed_token_data.token_data, ref_data);
@@ -350,7 +362,8 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
     }
     // 2. Revoke functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+        let compressed_account =
+            test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         let compressed_token_data = test_indexer
             .get_compressed_token_accounts_by_owner(&payer.pubkey())
             .await
@@ -370,16 +383,21 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         )
         .await
         .unwrap();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         let ref_data = ref_compressed_token_data.token_data.clone();
         assert_eq!(compressed_token_data.token_data, ref_data);
     }
     // 3. Freeze functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_account =
+            test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         perform_with_input_accounts(
             &test_indexer,
             &rpc,
@@ -392,17 +410,22 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         )
         .await
         .unwrap();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         let mut ref_data = ref_compressed_token_data.token_data.clone();
         ref_data.state = AccountState::Frozen;
         assert_eq!(compressed_token_data.token_data, ref_data);
     }
     // 4. Thaw functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_account =
+            test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         perform_with_input_accounts(
             &test_indexer,
             &rpc,
@@ -415,16 +438,21 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         )
         .await
         .unwrap();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         let ref_data = ref_compressed_token_data.token_data.clone();
         assert_eq!(compressed_token_data.token_data, ref_data);
     }
     // 5. Burn functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_account =
+            test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         perform_with_input_accounts(
             &test_indexer,
             &rpc,
@@ -437,8 +465,10 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         )
         .await
         .unwrap();
-        let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
+        let compressed_token_data = test_indexer
+            .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await[0]
+            .clone();
         let mut ref_data = ref_compressed_token_data.token_data.clone();
         ref_data.amount = 1;
         assert_eq!(compressed_token_data.token_data, ref_data);
