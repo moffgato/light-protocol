@@ -68,16 +68,6 @@ pub struct SolanaRpcConnection {
     retry_config: RetryConfig,
 }
 
-impl Debug for SolanaRpcConnection {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "SolanaRpcConnection {{ client: {:?} }}",
-            self.client.url()
-        )
-    }
-}
-
 impl SolanaRpcConnection {
     pub fn new_with_retry<U: ToString>(
         url: U,
@@ -197,8 +187,8 @@ impl RpcConnection for SolanaRpcConnection {
         Self::new_with_retry(url, commitment_config, None)
     }
 
-    fn get_payer(&self) -> &Keypair {
-        &self.payer
+    async fn get_payer(&self) -> Keypair {
+        self.payer.insecure_clone()
     }
 
     fn get_url(&self) -> String {
@@ -232,10 +222,7 @@ impl RpcConnection for SolanaRpcConnection {
         .await
     }
 
-    async fn process_transaction(
-        &mut self,
-        transaction: Transaction,
-    ) -> Result<Signature, RpcError> {
+    async fn process_transaction(&self, transaction: Transaction) -> Result<Signature, RpcError> {
         self.retry(|| async {
             self.client
                 .send_and_confirm_transaction(&transaction)
@@ -245,7 +232,7 @@ impl RpcConnection for SolanaRpcConnection {
     }
 
     async fn process_transaction_with_context(
-        &mut self,
+        &self,
         transaction: Transaction,
     ) -> Result<(Signature, Slot), RpcError> {
         self.retry(|| async {
@@ -263,7 +250,7 @@ impl RpcConnection for SolanaRpcConnection {
     }
 
     async fn create_and_send_transaction_with_event<T>(
-        &mut self,
+        &self,
         instructions: &[Instruction],
         payer: &Pubkey,
         signers: &[&Keypair],
@@ -343,7 +330,7 @@ impl RpcConnection for SolanaRpcConnection {
         .await
     }
 
-    async fn get_account(&mut self, address: Pubkey) -> Result<Option<Account>, RpcError> {
+    async fn get_account(&self, address: Pubkey) -> Result<Option<Account>, RpcError> {
         self.retry(|| async {
             self.client
                 .get_account_with_commitment(&address, self.client.commitment())
@@ -353,12 +340,12 @@ impl RpcConnection for SolanaRpcConnection {
         .await
     }
 
-    fn set_account(&mut self, _address: &Pubkey, _account: &AccountSharedData) {
+    async fn set_account(&self, _address: &Pubkey, _account: &AccountSharedData) {
         unimplemented!()
     }
 
     async fn get_minimum_balance_for_rent_exemption(
-        &mut self,
+        &self,
         data_len: usize,
     ) -> Result<u64, RpcError> {
         self.retry(|| async {
@@ -369,11 +356,7 @@ impl RpcConnection for SolanaRpcConnection {
         .await
     }
 
-    async fn airdrop_lamports(
-        &mut self,
-        to: &Pubkey,
-        lamports: u64,
-    ) -> Result<Signature, RpcError> {
+    async fn airdrop_lamports(&self, to: &Pubkey, lamports: u64) -> Result<Signature, RpcError> {
         self.retry(|| async {
             let signature = self
                 .client
@@ -398,22 +381,22 @@ impl RpcConnection for SolanaRpcConnection {
         .await
     }
 
-    async fn get_balance(&mut self, pubkey: &Pubkey) -> Result<u64, RpcError> {
+    async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64, RpcError> {
         self.retry(|| async { self.client.get_balance(pubkey).map_err(RpcError::from) })
             .await
     }
 
-    async fn get_latest_blockhash(&mut self) -> Result<Hash, RpcError> {
+    async fn get_latest_blockhash(&self) -> Result<Hash, RpcError> {
         self.retry(|| async { self.client.get_latest_blockhash().map_err(RpcError::from) })
             .await
     }
 
-    async fn get_slot(&mut self) -> Result<u64, RpcError> {
+    async fn get_slot(&self) -> Result<u64, RpcError> {
         self.retry(|| async { self.client.get_slot().map_err(RpcError::from) })
             .await
     }
 
-    async fn warp_to_slot(&mut self, _slot: Slot) -> Result<(), RpcError> {
+    async fn warp_to_slot(&self, _slot: Slot) -> Result<(), RpcError> {
         Err(RpcError::CustomError(
             "Warp to slot is not supported in SolanaRpcConnection".to_string(),
         ))

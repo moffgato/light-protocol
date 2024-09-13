@@ -39,7 +39,7 @@ use system_cpi_test::sdk::{
 
 #[tokio::test]
 async fn test_program_owned_merkle_tree() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(Some(vec![(
+    let (rpc, env) = setup_test_programs_with_accounts(Some(vec![(
         String::from("system_cpi_test"),
         system_cpi_test::ID,
     )]))
@@ -52,11 +52,11 @@ async fn test_program_owned_merkle_tree() {
     let program_owned_nullifier_queue_keypair = Keypair::new();
     let cpi_context_keypair = Keypair::new();
 
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, true).await;
     test_indexer
         .add_state_merkle_tree(
-            &mut rpc,
+            &rpc,
             &program_owned_merkle_tree_keypair,
             &program_owned_nullifier_queue_keypair,
             &cpi_context_keypair,
@@ -66,7 +66,7 @@ async fn test_program_owned_merkle_tree() {
         .await;
 
     let recipient_keypair = Keypair::new();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     let instruction = create_mint_to_instruction(
         &payer_pubkey,
@@ -82,7 +82,7 @@ async fn test_program_owned_merkle_tree() {
         ProgramTestRpcConnection,
         Poseidon,
         26,
-    >(&mut rpc, program_owned_merkle_tree_pubkey)
+    >(&rpc, program_owned_merkle_tree_pubkey)
     .await;
     let event = rpc
         .create_and_send_transaction_with_event(
@@ -105,13 +105,17 @@ async fn test_program_owned_merkle_tree() {
         ProgramTestRpcConnection,
         Poseidon,
         26,
-    >(&mut rpc, program_owned_merkle_tree_pubkey)
+    >(&rpc, program_owned_merkle_tree_pubkey)
     .await;
-    test_indexer.add_compressed_accounts_with_token_data(&event.0);
+    test_indexer
+        .add_compressed_accounts_with_token_data(&event.0)
+        .await;
+
+    let indexer_state = test_indexer.state.read().await;
     assert_ne!(post_merkle_tree.root(), pre_merkle_tree.root());
     assert_eq!(
         post_merkle_tree.root(),
-        test_indexer.state_merkle_trees[1].merkle_tree.root()
+        indexer_state.state_merkle_trees[1].merkle_tree.root()
     );
 
     let invalid_program_owned_merkle_tree_keypair = Keypair::new();
@@ -121,7 +125,7 @@ async fn test_program_owned_merkle_tree() {
     let cpi_context_keypair = Keypair::new();
     test_indexer
         .add_state_merkle_tree(
-            &mut rpc,
+            &rpc,
             &invalid_program_owned_merkle_tree_keypair,
             &invalid_program_owned_nullifier_queue_keypair,
             &cpi_context_keypair,
@@ -708,9 +712,7 @@ pub async fn create_state_merkle_tree_and_queue_account<R: RpcConnection>(
     let merkle_tree_account_create_ix = create_account_instruction(
         &payer.pubkey(),
         size,
-        rpc.get_minimum_balance_for_rent_exemption(size)
-            .await
-            .unwrap(),
+        rpc.get_minimum_balance_for_rent_exemption(size).await?,
         &account_compression::ID,
         Some(merkle_tree_keypair),
     );
@@ -718,9 +720,7 @@ pub async fn create_state_merkle_tree_and_queue_account<R: RpcConnection>(
     let nullifier_queue_account_create_ix = create_account_instruction(
         &payer.pubkey(),
         size,
-        rpc.get_minimum_balance_for_rent_exemption(size)
-            .await
-            .unwrap(),
+        rpc.get_minimum_balance_for_rent_exemption(size).await?,
         &account_compression::ID,
         Some(nullifier_queue_keypair),
     );
@@ -745,7 +745,7 @@ pub async fn create_state_merkle_tree_and_queue_account<R: RpcConnection>(
         ],
         Some(&payer.pubkey()),
         &vec![payer, merkle_tree_keypair, nullifier_queue_keypair],
-        rpc.get_latest_blockhash().await.unwrap(),
+        rpc.get_latest_blockhash().await?,
     );
     rpc.process_transaction(transaction.clone()).await
 }
@@ -767,10 +767,7 @@ pub async fn create_address_merkle_tree_and_queue_account<R: RpcConnection>(
     let account_create_ix = create_account_instruction(
         &payer.pubkey(),
         size,
-        context
-            .get_minimum_balance_for_rent_exemption(size)
-            .await
-            .unwrap(),
+        context.get_minimum_balance_for_rent_exemption(size).await?,
         &account_compression::ID,
         Some(address_queue_keypair),
     );
@@ -785,10 +782,7 @@ pub async fn create_address_merkle_tree_and_queue_account<R: RpcConnection>(
     let mt_account_create_ix = create_account_instruction(
         &payer.pubkey(),
         size,
-        context
-            .get_minimum_balance_for_rent_exemption(size)
-            .await
-            .unwrap(),
+        context.get_minimum_balance_for_rent_exemption(size).await?,
         &account_compression::ID,
         Some(address_merkle_tree_keypair),
     );
@@ -806,7 +800,7 @@ pub async fn create_address_merkle_tree_and_queue_account<R: RpcConnection>(
         &[account_create_ix, mt_account_create_ix, instruction],
         Some(&payer.pubkey()),
         &vec![&payer, &address_queue_keypair, &address_merkle_tree_keypair],
-        context.get_latest_blockhash().await.unwrap(),
+        context.get_latest_blockhash().await?,
     );
     context.process_transaction(transaction.clone()).await
 }

@@ -21,7 +21,7 @@ use solana_sdk::signer::Signer;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{sleep, timeout};
 
 mod test_utils;
@@ -99,18 +99,24 @@ async fn test_epoch_monitor_with_test_indexer_and_1_forester() {
         .await
         .unwrap();
     env.compress_sol(user_index, balance).await;
-    let state_trees: Vec<StateMerkleTreeAccounts> = env
-        .indexer
-        .state_merkle_trees
-        .iter()
-        .map(|x| x.accounts)
-        .collect();
-    let address_trees: Vec<AddressMerkleTreeAccounts> = env
-        .indexer
-        .address_merkle_trees
-        .iter()
-        .map(|x| x.accounts)
-        .collect();
+
+    let state_trees: Vec<StateMerkleTreeAccounts> = {
+        let indexer_state = env.indexer.state.read().await;
+        indexer_state
+            .state_merkle_trees
+            .iter()
+            .map(|x| x.accounts)
+            .collect()
+    };
+
+    let address_trees: Vec<AddressMerkleTreeAccounts> = {
+        let indexer_state = env.indexer.state.read().await;
+        indexer_state
+            .address_merkle_trees
+            .iter()
+            .map(|x| x.accounts)
+            .collect()
+    };
 
     let iterations = 1;
     let mut total_expected_work = 0;
@@ -139,7 +145,7 @@ async fn test_epoch_monitor_with_test_indexer_and_1_forester() {
     // Run the forester as pipeline
     let service_handle = tokio::spawn(run_pipeline(
         config.clone(),
-        Arc::new(Mutex::new(env.indexer)),
+        Arc::new(env.indexer),
         shutdown_receiver,
         work_report_sender,
     ));
@@ -147,7 +153,7 @@ async fn test_epoch_monitor_with_test_indexer_and_1_forester() {
     if work_report_receiver.recv().await.is_some() {
         println!("work_reported");
     };
-    let mut rpc = pool.get_connection().await.unwrap();
+    let rpc = pool.get_connection().await.unwrap();
     let epoch_pda_address = get_epoch_pda_address(0);
     let epoch_pda = (*rpc)
         .get_anchor_account::<EpochPda>(&epoch_pda_address)
@@ -321,23 +327,30 @@ async fn test_epoch_monitor_with_2_foresters() {
     // Create state and address trees which can be rolled over
     env.create_address_tree(Some(0)).await;
     env.create_state_tree(Some(0)).await;
-    let state_tree_with_rollover_threshold_0 =
-        env.indexer.state_merkle_trees[1].accounts.merkle_tree;
-    let address_tree_with_rollover_threshold_0 =
-        env.indexer.address_merkle_trees[1].accounts.merkle_tree;
-
-    let state_trees: Vec<StateMerkleTreeAccounts> = env
-        .indexer
-        .state_merkle_trees
-        .iter()
-        .map(|x| x.accounts)
-        .collect();
-    let address_trees: Vec<AddressMerkleTreeAccounts> = env
-        .indexer
-        .address_merkle_trees
-        .iter()
-        .map(|x| x.accounts)
-        .collect();
+    let state_tree_with_rollover_threshold_0 = {
+        let indexer_state = env.indexer.state.read().await;
+        indexer_state.state_merkle_trees[1].accounts.merkle_tree
+    };
+    let address_tree_with_rollover_threshold_0 = {
+        let indexer_state = env.indexer.state.read().await;
+        indexer_state.address_merkle_trees[1].accounts.merkle_tree
+    };
+    let state_trees: Vec<StateMerkleTreeAccounts> = {
+        let indexer_state = env.indexer.state.read().await;
+        indexer_state
+            .state_merkle_trees
+            .iter()
+            .map(|x| x.accounts)
+            .collect()
+    };
+    let address_trees: Vec<AddressMerkleTreeAccounts> = {
+        let indexer_state = env.indexer.state.read().await;
+        indexer_state
+            .address_merkle_trees
+            .iter()
+            .map(|x| x.accounts)
+            .collect()
+    };
 
     println!("Address trees: {:?}", address_trees);
 
@@ -374,7 +387,7 @@ async fn test_epoch_monitor_with_2_foresters() {
     let (work_report_sender1, mut work_report_receiver1) = mpsc::channel(100);
     let (work_report_sender2, mut work_report_receiver2) = mpsc::channel(100);
 
-    let indexer = Arc::new(Mutex::new(env.indexer));
+    let indexer = Arc::new(env.indexer);
 
     let service_handle1 = tokio::spawn(run_pipeline(
         config1.clone(),
@@ -482,7 +495,7 @@ pub async fn assert_trees_are_rollledover(
     state_tree_with_rollover_threshold_0: &Pubkey,
     address_tree_with_rollover_threshold_0: &Pubkey,
 ) {
-    let mut rpc = pool.get_connection().await.unwrap();
+    let rpc = pool.get_connection().await.unwrap();
     let address_merkle_tree = rpc
         .get_anchor_account::<AddressMerkleTreeAccount>(address_tree_with_rollover_threshold_0)
         .await
@@ -595,7 +608,7 @@ async fn test_epoch_double_registration() {
     let indexer: TestIndexer<SolanaRpcConnection> =
         TestIndexer::init_from_env(&config.payer_keypair, &env_accounts, false, false).await;
 
-    let indexer = Arc::new(Mutex::new(indexer));
+    let indexer = Arc::new(indexer);
 
     for _ in 0..10 {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();

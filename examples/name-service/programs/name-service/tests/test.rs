@@ -87,7 +87,7 @@ async fn test_name_service() {
     // Create the example.io -> 10.0.1.25 record.
     let rdata_1 = RData::A(Ipv4Addr::new(10, 0, 1, 25));
     create_record(
-        &name,
+        name,
         &rdata_1,
         &mut rpc,
         &mut test_indexer,
@@ -116,12 +116,12 @@ async fn test_name_service() {
             &payer,
             &address,
             &merkle_context,
-            &address_merkle_context,
-            &account_compression_authority,
-            &registered_program_pda,
+        &address_merkle_context,
+        &account_compression_authority,
+        &registered_program_pda,
             &Pubkey::new_unique(),
-        )
-        .await;
+    )
+    .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -131,7 +131,9 @@ async fn test_name_service() {
     }
 
     // Check that it was created correctly.
-    let compressed_accounts = test_indexer.get_compressed_accounts_by_owner(&name_service::ID);
+    let compressed_accounts = test_indexer
+        .get_compressed_accounts_by_owner(&name_service::ID)
+        .await;
     assert_eq!(compressed_accounts.len(), 1);
     let compressed_account = &compressed_accounts[0];
     let record = &compressed_account
@@ -211,7 +213,9 @@ async fn test_name_service() {
     }
 
     // Check that it was updated correctly.
-    let compressed_accounts = test_indexer.get_compressed_accounts_by_owner(&name_service::ID);
+    let compressed_accounts = test_indexer
+        .get_compressed_accounts_by_owner(&name_service::ID)
+        .await;
     assert_eq!(compressed_accounts.len(), 1);
     let compressed_account = &compressed_accounts[0];
     let record = &compressed_account
@@ -355,7 +359,7 @@ where
     Ok(())
 }
 
-async fn update_record<R>(
+async fn update_record<R: RpcConnection>(
     rpc: &mut R,
     test_indexer: &mut TestIndexer<R>,
     remaining_accounts: &mut RemainingAccounts,

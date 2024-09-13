@@ -5,6 +5,7 @@ use account_compression::{
 };
 use anchor_lang::{InstructionData, ToAccountMetas};
 use forester_utils::forester_epoch::get_epoch_phases;
+use forester_utils::indexer::Indexer;
 use light_registry::account_compression_cpi::sdk::{
     create_nullify_instruction, create_update_address_merkle_tree_instruction,
     CreateNullifyInstructionInputs, UpdateAddressMerkleTreeInstructionInputs,
@@ -48,6 +49,8 @@ use solana_sdk::{
     signer::Signer,
 };
 use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[test]
 fn test_protocol_config_active_phase_continuity() {
@@ -136,7 +139,8 @@ fn test_protocol_config_active_phase_continuity_for_config(config: ProtocolConfi
 #[tokio::test]
 async fn test_initialize_protocol_config() {
     let rpc = setup_test_programs(None).await;
-    let mut rpc = ProgramTestRpcConnection { context: rpc };
+    let rpc = Arc::new(RwLock::new(rpc));
+    let rpc = ProgramTestRpcConnection { context: rpc };
 
     let payer = rpc.get_payer().insecure_clone();
     let program_account_keypair = Keypair::from_bytes(&OLD_REGISTRY_ID_TEST_KEYPAIR).unwrap();
@@ -279,13 +283,13 @@ async fn test_initialize_protocol_config() {
 
     let group_seed_keypair = Keypair::from_bytes(&GROUP_PDA_SEED_TEST_KEYPAIR).unwrap();
     let group_pda =
-        initialize_new_group(&group_seed_keypair, &payer, &mut rpc, cpi_authority_pda.0).await;
+        initialize_new_group(&group_seed_keypair, &payer, &rpc, cpi_authority_pda.0).await;
 
     let random_program_keypair = Keypair::new();
     // register program with invalid authority
     {
         let result = register_program_with_registry_program(
-            &mut rpc,
+            &rpc,
             &payer,
             &group_pda,
             &random_program_keypair,
@@ -298,7 +302,7 @@ async fn test_initialize_protocol_config() {
     {
         let random_program_keypair = Keypair::new();
         register_program_with_registry_program(
-            &mut rpc,
+            &rpc,
             &updated_keypair,
             &group_pda,
             &random_program_keypair,
@@ -306,7 +310,7 @@ async fn test_initialize_protocol_config() {
         .await
         .unwrap();
         let result = deregister_program_with_registry_program(
-            &mut rpc,
+            &rpc,
             &payer,
             &group_pda,
             &random_program_keypair,
@@ -315,7 +319,7 @@ async fn test_initialize_protocol_config() {
         let expected_error_code = anchor_lang::error::ErrorCode::ConstraintHasOne as u32;
         assert_rpc_error(result, 1, expected_error_code).unwrap();
         deregister_program_with_registry_program(
-            &mut rpc,
+            &rpc,
             &updated_keypair,
             &group_pda,
             &random_program_keypair,
@@ -331,7 +335,7 @@ async fn test_initialize_protocol_config() {
         create_state_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &nullifier_queue_keypair,
             Some(&cpi_context_keypair),
@@ -355,7 +359,7 @@ async fn test_initialize_protocol_config() {
         let result = create_state_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &nullifier_queue_keypair,
             Some(&cpi_context_keypair),
@@ -379,7 +383,7 @@ async fn test_initialize_protocol_config() {
         create_state_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &nullifier_queue_keypair,
             Some(&cpi_context_keypair),
@@ -403,7 +407,7 @@ async fn test_initialize_protocol_config() {
         let result = create_state_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &nullifier_queue_keypair,
             Some(&cpi_context_keypair),
@@ -427,7 +431,7 @@ async fn test_initialize_protocol_config() {
         create_address_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &queue_keypair,
             None,
@@ -449,7 +453,7 @@ async fn test_initialize_protocol_config() {
         create_address_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &queue_keypair,
             None,
@@ -471,7 +475,7 @@ async fn test_initialize_protocol_config() {
         let result = create_address_merkle_tree_and_queue_account(
             &payer,
             true,
-            &mut rpc,
+            &rpc,
             &merkle_tree_keypair,
             &queue_keypair,
             None,
@@ -491,7 +495,7 @@ async fn test_initialize_protocol_config() {
 
 #[tokio::test]
 async fn test_custom_forester() {
-    let (mut rpc, env) = setup_test_programs_with_accounts_with_protocol_config(
+    let (rpc, env) = setup_test_programs_with_accounts_with_protocol_config(
         None,
         ProtocolConfig::default(),
         false,
@@ -507,14 +511,14 @@ async fn test_custom_forester() {
         let nullifier_queue_keypair = Keypair::new();
         let cpi_context_keypair = Keypair::new();
         // create work 1 item in address and nullifier queue each
-        let (mut state_merkle_tree_bundle, _, mut rpc) = {
+        let (mut state_merkle_tree_bundle, _, rpc) = {
             let mut e2e_env = init_program_test_env(rpc, &env).await;
-            e2e_env.indexer.state_merkle_trees.clear();
+            e2e_env.indexer.clear_state_trees().await;
             // add state merkle tree to the indexer
             e2e_env
                 .indexer
                 .add_state_merkle_tree(
-                    &mut e2e_env.rpc,
+                    &e2e_env.rpc,
                     &merkle_tree_keypair,
                     &nullifier_queue_keypair,
                     &cpi_context_keypair,
@@ -536,26 +540,22 @@ async fn test_custom_forester() {
                 .await
                 .unwrap();
 
+            let indexer_state = e2e_env.indexer.state.read().await;
             (
-                e2e_env.indexer.state_merkle_trees[0].clone(),
-                e2e_env.indexer.address_merkle_trees[0].clone(),
+                indexer_state.state_merkle_trees[0].clone(),
+                indexer_state.address_merkle_trees[0].clone(),
                 e2e_env.rpc,
             )
         };
         {
-            let result = nullify_compressed_accounts(
-                &mut rpc,
-                &payer,
-                &mut state_merkle_tree_bundle,
-                0,
-                true,
-            )
-            .await;
+            let result =
+                nullify_compressed_accounts(&rpc, &payer, &mut state_merkle_tree_bundle, 0, true)
+                    .await;
             assert_rpc_error(result, 0, RegistryError::InvalidSigner.into()).unwrap();
         }
         // nullify with tree forester
         nullify_compressed_accounts(
-            &mut rpc,
+            &rpc,
             &unregistered_forester_keypair,
             &mut state_merkle_tree_bundle,
             0,
@@ -725,7 +725,7 @@ async fn test_register_and_update_forester_pda() {
     }
 
     // create work 1 item in address and nullifier queue each
-    let (mut state_merkle_tree_bundle, mut address_merkle_tree, mut rpc) = {
+    let (mut state_merkle_tree_bundle, mut address_merkle_tree, rpc) = {
         let mut e2e_env = init_program_test_env(rpc, &env).await;
         e2e_env.create_address(None, None).await;
         e2e_env
@@ -736,15 +736,16 @@ async fn test_register_and_update_forester_pda() {
             .await
             .unwrap();
 
+        let indexer_state = e2e_env.indexer.state.read().await;
         (
-            e2e_env.indexer.state_merkle_trees[0].clone(),
-            e2e_env.indexer.address_merkle_trees[0].clone(),
+            indexer_state.state_merkle_trees[0].clone(),
+            indexer_state.address_merkle_trees[0].clone(),
             e2e_env.rpc,
         )
     };
     // perform 1 work
     nullify_compressed_accounts(
-        &mut rpc,
+        &rpc,
         &forester_keypair,
         &mut state_merkle_tree_bundle,
         epoch,
@@ -754,7 +755,7 @@ async fn test_register_and_update_forester_pda() {
     .unwrap();
     empty_address_queue_test(
         &forester_keypair,
-        &mut rpc,
+        &rpc,
         &mut address_merkle_tree,
         false,
         epoch,
@@ -770,15 +771,15 @@ async fn test_register_and_update_forester_pda() {
     .await
     .unwrap();
     // register for next epoch
-    let next_registered_epoch = Epoch::register(&mut rpc, &protocol_config, &forester_keypair)
+    let next_registered_epoch = Epoch::register(&rpc, &protocol_config, &forester_keypair)
         .await
         .unwrap();
     assert!(next_registered_epoch.is_some());
     let next_registered_epoch = next_registered_epoch.unwrap();
     assert_eq!(next_registered_epoch.epoch, 1);
-    assert_epoch_pda(&mut rpc, next_registered_epoch.epoch, expected_stake).await;
+    assert_epoch_pda(&rpc, next_registered_epoch.epoch, expected_stake).await;
     assert_registered_forester_pda(
-        &mut rpc,
+        &rpc,
         &next_registered_epoch.forester_epoch_pda,
         &forester_keypair.pubkey(),
         next_registered_epoch.epoch,
@@ -790,7 +791,7 @@ async fn test_register_and_update_forester_pda() {
     // report work
     {
         let (pre_forester_epoch_pda, pre_epoch_pda) = fetch_epoch_and_forester_pdas(
-            &mut rpc,
+            &rpc,
             &registered_epoch.forester_epoch_pda,
             &registered_epoch.epoch_pda,
         )
@@ -800,7 +801,7 @@ async fn test_register_and_update_forester_pda() {
             .await
             .unwrap();
         assert_report_work(
-            &mut rpc,
+            &rpc,
             &registered_epoch.forester_epoch_pda,
             &registered_epoch.epoch_pda,
             pre_forester_epoch_pda,

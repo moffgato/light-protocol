@@ -56,14 +56,14 @@ use spl_token::{error::TokenError, instruction::initialize_mint};
 
 #[tokio::test]
 async fn test_create_mint() {
-    let (mut rpc, _) = setup_test_programs_with_accounts(None).await;
+    let (rpc, _) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
-    create_mint_helper(&mut rpc, &payer).await;
+    create_mint_helper(&rpc, &payer).await;
 }
 
 #[tokio::test]
 async fn test_failing_create_token_pool() {
-    let (mut rpc, _) = setup_test_programs_with_accounts(None).await;
+    let (rpc, _) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
 
     let rent = rpc
@@ -177,17 +177,17 @@ async fn test_failing_create_token_pool() {
 
 #[tokio::test]
 async fn test_wrapped_sol() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let native_mint = spl_token::native_mint::ID;
     let token_account_keypair = Keypair::new();
-    create_token_account(&mut rpc, &native_mint, &token_account_keypair, &payer)
+    create_token_account(&rpc, &native_mint, &token_account_keypair, &payer)
         .await
         .unwrap();
     let amount = 1_000_000_000u64;
-    mint_wrapped_sol(&mut rpc, &payer, &token_account_keypair.pubkey(), amount)
+    mint_wrapped_sol(&rpc, &payer, &token_account_keypair.pubkey(), amount)
         .await
         .unwrap();
     let fetched_token_account = rpc
@@ -209,8 +209,8 @@ async fn test_wrapped_sol() {
 
     compress_test(
         &payer,
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         amount,
         &native_mint,
         &env.merkle_tree_pubkey,
@@ -218,12 +218,13 @@ async fn test_wrapped_sol() {
         None,
     )
     .await;
-    let input_compressed_accounts =
-        test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey());
+    let input_compressed_accounts = test_indexer
+        .get_compressed_token_accounts_by_owner(&payer.pubkey())
+        .await;
     decompress_test(
         &payer,
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         input_compressed_accounts,
         amount,
         &env.merkle_tree_pubkey,
@@ -235,22 +236,22 @@ async fn test_wrapped_sol() {
 }
 
 async fn test_mint_to(amounts: Vec<u64>, iterations: usize, lamports: Option<u64>) {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, false, false).await;
 
     let recipients = amounts
         .iter()
         .map(|_| Keypair::new().pubkey())
         .collect::<Vec<_>>();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
 
     for _ in 0..iterations {
         mint_tokens_helper_with_lamports(
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &merkle_tree_pubkey,
             &payer,
             &mint,
@@ -281,7 +282,7 @@ async fn test_5_mint_to() {
 #[tokio::test]
 async fn test_10_mint_to() {
     let mut rng = rand::thread_rng();
-    // Make sure that the tokal token supply does not exceed `u64::MAX`.
+    // Make sure that the total token supply does not exceed `u64::MAX`.
     let amounts: Vec<u64> = (0..10).map(|_| rng.gen_range(0..(u64::MAX / 10))).collect();
     test_mint_to(amounts, 1, Some(1_000_000)).await
 }
@@ -328,23 +329,23 @@ async fn test_25_mint_to_zeros() {
 async fn test_mint_to_failing() {
     const MINTS: usize = 10;
 
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer_1 = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
 
     let mut rng = rand::thread_rng();
 
     let payer_2 = Keypair::new();
-    airdrop_lamports(&mut rpc, &payer_2.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &payer_2.pubkey(), 1_000_000_000)
         .await
         .unwrap();
 
-    let mint_1 = create_mint_helper(&mut rpc, &payer_1).await;
+    let mint_1 = create_mint_helper(&rpc, &payer_1).await;
     let mint_pool_1 = get_token_pool_pda(&mint_1);
 
-    let mint_2 = create_mint_helper(&mut rpc, &payer_2).await;
+    let mint_2 = create_mint_helper(&rpc, &payer_2).await;
 
-    // Make sure that the tokal token supply does not exceed `u64::MAX`.
+    // Make sure that the total token supply does not exceed `u64::MAX`.
     let amounts: Vec<u64> = (0..MINTS)
         .map(|_| rng.gen_range(0..(u64::MAX / MINTS as u64)))
         .collect();
@@ -396,7 +397,7 @@ async fn test_mint_to_failing() {
     // 3. Try to mint token to random token account.
     {
         let token_account_keypair = Keypair::new();
-        create_token_account(&mut rpc, &mint_1, &token_account_keypair, &payer_1)
+        create_token_account(&rpc, &mint_1, &token_account_keypair, &payer_1)
             .await
             .unwrap();
         let accounts = light_compressed_token::accounts::MintToInstruction {
@@ -768,16 +769,16 @@ async fn test_8_transfer() {
 /// Creates inputs compressed accounts with amount tokens each
 /// Transfers all tokens from inputs compressed accounts evenly distributed to outputs compressed accounts
 async fn perform_transfer_test(inputs: usize, outputs: usize, amount: u64) {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let sender = Keypair::new();
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -790,16 +791,17 @@ async fn perform_transfer_test(inputs: usize, outputs: usize, amount: u64) {
     for _ in 0..outputs {
         recipients.push(Pubkey::new_unique());
     }
-    let input_compressed_accounts =
-        test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+    let input_compressed_accounts = test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await;
     let equal_amount = (amount * inputs as u64) / outputs as u64;
     let rest_amount = (amount * inputs as u64) % outputs as u64;
     let mut output_amounts = vec![equal_amount; outputs - 1];
     output_amounts.push(equal_amount + rest_amount);
     compressed_transfer_test(
         &payer,
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &mint,
         &sender,
         &recipients,
@@ -816,20 +818,20 @@ async fn perform_transfer_test(inputs: usize, outputs: usize, amount: u64) {
 
 #[tokio::test]
 async fn test_decompression() {
-    let (mut context, env) = setup_test_programs_with_accounts(None).await;
+    let (context, env) = setup_test_programs_with_accounts(None).await;
     let payer = context.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut context, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&context, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut context, &payer).await;
+    let mint = create_mint_helper(&context, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -838,15 +840,16 @@ async fn test_decompression() {
     )
     .await;
     let token_account_keypair = Keypair::new();
-    create_token_account(&mut context, &mint, &token_account_keypair, &sender)
+    create_token_account(&context, &mint, &token_account_keypair, &sender)
         .await
         .unwrap();
-    let input_compressed_account =
-        test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+    let input_compressed_account = test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await;
     decompress_test(
         &sender,
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         input_compressed_account,
         amount,
         &merkle_tree_pubkey,
@@ -857,8 +860,8 @@ async fn test_decompression() {
 
     compress_test(
         &sender,
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         amount,
         &mint,
         &merkle_tree_pubkey,
@@ -880,23 +883,23 @@ async fn test_delegation(
     output_amounts_1: Vec<u64>,
     output_amounts_2: Vec<u64>,
 ) {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -907,16 +910,17 @@ async fn test_delegation(
     .await;
     // 1. Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
             .merkle_context
             .merkle_tree_pubkey;
         approve_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             delegated_amount,
             Some(100),
@@ -931,8 +935,9 @@ async fn test_delegation(
     let recipient = Pubkey::new_unique();
     // 2. Transfer partial delegated amount
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
@@ -940,8 +945,8 @@ async fn test_delegation(
             .collect::<Vec<TokenDataWithContext>>();
         compressed_transfer_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &mint,
             &sender,
             &[recipient, sender.pubkey()],
@@ -957,8 +962,9 @@ async fn test_delegation(
     }
     // 3. Transfer full delegated amount
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
@@ -966,8 +972,8 @@ async fn test_delegation(
             .collect::<Vec<TokenDataWithContext>>();
         compressed_transfer_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &mint,
             &sender,
             &[recipient],
@@ -994,23 +1000,23 @@ async fn test_delegation_mixed() {
     let num_inputs: usize = 2;
     let delegated_amount: u64 = 3000;
 
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1021,8 +1027,8 @@ async fn test_delegation_mixed() {
     .await;
 
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1033,16 +1039,17 @@ async fn test_delegation_mixed() {
     .await;
     // 1. Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
             .merkle_context
             .merkle_tree_pubkey;
         approve_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             delegated_amount,
             Some(100),
@@ -1057,15 +1064,17 @@ async fn test_delegation_mixed() {
     let recipient = Pubkey::new_unique();
     // 2. Transfer partial delegated amount with delegate change account
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let mut input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
             .cloned()
             .collect::<Vec<TokenDataWithContext>>();
-        let delegate_input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&delegate.pubkey());
+        let delegate_input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&delegate.pubkey())
+            .await;
         input_compressed_accounts
             .extend_from_slice(&[delegate_input_compressed_accounts[0].clone()]);
         let delegate_lamports = delegate_input_compressed_accounts[0]
@@ -1078,8 +1087,8 @@ async fn test_delegation_mixed() {
             .sum::<u64>();
         compressed_transfer_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &mint,
             &sender,
             &[recipient, sender.pubkey(), delegate.pubkey()],
@@ -1096,15 +1105,17 @@ async fn test_delegation_mixed() {
     let recipient = Pubkey::new_unique();
     // 3. Transfer partial delegated amount without delegate change account
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let mut input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
             .cloned()
             .collect::<Vec<TokenDataWithContext>>();
-        let delegate_input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&delegate.pubkey());
+        let delegate_input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&delegate.pubkey())
+            .await;
         input_compressed_accounts
             .extend_from_slice(&[delegate_input_compressed_accounts[0].clone()]);
         let delegate_input_amount = input_compressed_accounts
@@ -1119,8 +1130,8 @@ async fn test_delegation_mixed() {
             - 100;
         compressed_transfer_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &mint,
             &sender,
             &[recipient, sender.pubkey(), delegate.pubkey()],
@@ -1137,15 +1148,17 @@ async fn test_delegation_mixed() {
     }
     // 3. Transfer full delegated amount
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let mut input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
             .cloned()
             .collect::<Vec<TokenDataWithContext>>();
-        let delegate_input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&delegate.pubkey());
+        let delegate_input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&delegate.pubkey())
+            .await;
 
         input_compressed_accounts.extend_from_slice(&delegate_input_compressed_accounts);
         let input_amount = input_compressed_accounts
@@ -1154,8 +1167,8 @@ async fn test_delegation_mixed() {
             .sum::<u64>();
         compressed_transfer_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &mint,
             &sender,
             &[recipient],
@@ -1210,24 +1223,24 @@ async fn test_delegation_max() {
 /// 4. Invalid mint.
 #[tokio::test]
 async fn test_approve_failing() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1236,8 +1249,9 @@ async fn test_approve_failing() {
     )
     .await;
 
-    let input_compressed_accounts =
-        test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+    let input_compressed_accounts = test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await;
     let delegated_amount = 1000u64;
     let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
         .compressed_account
@@ -1258,7 +1272,7 @@ async fn test_approve_failing() {
             Some(&input_merkle_tree_pubkeys),
             None,
             None,
-            &mut rpc,
+            &rpc,
         )
         .await;
     let mint = input_compressed_accounts[0].token_data.mint;
@@ -1490,23 +1504,23 @@ async fn test_approve_failing() {
 /// 1. Delegate tokens with approve
 /// 2. Revoke
 async fn test_revoke(num_inputs: usize, mint_amount: u64, delegated_amount: u64) {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1517,8 +1531,9 @@ async fn test_revoke(num_inputs: usize, mint_amount: u64, delegated_amount: u64)
     .await;
     // 1. Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         for input in input_compressed_accounts.iter() {
             let input_compressed_accounts = vec![input.clone()];
             let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
@@ -1527,8 +1542,8 @@ async fn test_revoke(num_inputs: usize, mint_amount: u64, delegated_amount: u64)
                 .merkle_tree_pubkey;
             approve_test(
                 &sender,
-                &mut rpc,
-                &mut test_indexer,
+                &rpc,
+                &test_indexer,
                 input_compressed_accounts,
                 delegated_amount,
                 Some(1000),
@@ -1544,6 +1559,7 @@ async fn test_revoke(num_inputs: usize, mint_amount: u64, delegated_amount: u64)
     {
         let input_compressed_accounts = test_indexer
             .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
             .cloned()
@@ -1559,8 +1575,8 @@ async fn test_revoke(num_inputs: usize, mint_amount: u64, delegated_amount: u64)
             .merkle_tree_pubkey;
         revoke_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &delegated_compressed_account_merkle_tree,
             None,
@@ -1598,24 +1614,24 @@ async fn test_revoke_max() {
 /// 3. Invalid mint.
 #[tokio::test]
 async fn test_revoke_failing() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1625,8 +1641,9 @@ async fn test_revoke_failing() {
     .await;
     // Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let delegated_amount = 1000u64;
         let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -1634,8 +1651,8 @@ async fn test_revoke_failing() {
             .merkle_tree_pubkey;
         approve_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             delegated_amount,
             None,
@@ -1647,8 +1664,9 @@ async fn test_revoke_failing() {
         .await;
     }
 
-    let input_compressed_accounts =
-        test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+    let input_compressed_accounts = test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await;
     let input_compressed_accounts = input_compressed_accounts
         .iter()
         .filter(|x| x.token_data.delegate.is_some())
@@ -1669,7 +1687,7 @@ async fn test_revoke_failing() {
             Some(&input_merkle_tree_pubkeys),
             None,
             None,
-            &mut rpc,
+            &rpc,
         )
         .await;
 
@@ -1798,24 +1816,24 @@ async fn test_revoke_failing() {
 /// 2. Burn delegated tokens
 #[tokio::test]
 async fn test_burn() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1826,8 +1844,9 @@ async fn test_burn() {
     .await;
     // 1. Burn tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let burn_amount = 1000u64;
         let change_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -1835,8 +1854,8 @@ async fn test_burn() {
             .merkle_tree_pubkey;
         burn_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -1847,8 +1866,9 @@ async fn test_burn() {
     }
     // 2. Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let delegated_amount = 1000u64;
         let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -1856,8 +1876,8 @@ async fn test_burn() {
             .merkle_tree_pubkey;
         approve_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             delegated_amount,
             None,
@@ -1870,8 +1890,9 @@ async fn test_burn() {
     }
     // 3. Burn delegated tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
@@ -1884,8 +1905,8 @@ async fn test_burn() {
             .merkle_tree_pubkey;
         burn_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -1896,8 +1917,9 @@ async fn test_burn() {
     }
     // 3. Burn all delegated tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
@@ -1913,8 +1935,8 @@ async fn test_burn() {
             .merkle_tree_pubkey;
         burn_test(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -1927,24 +1949,24 @@ async fn test_burn() {
 
 #[tokio::test]
 async fn failing_tests_burn() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -1954,8 +1976,9 @@ async fn failing_tests_burn() {
     .await;
     // Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let delegated_amount = 1000u64;
         let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -1963,8 +1986,8 @@ async fn failing_tests_burn() {
             .merkle_tree_pubkey;
         approve_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             delegated_amount,
             None,
@@ -1977,8 +2000,9 @@ async fn failing_tests_burn() {
     }
     // 1. invalid proof
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let burn_amount = 1;
         let change_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -1986,8 +2010,8 @@ async fn failing_tests_burn() {
             .merkle_tree_pubkey;
         let (_, _, _, _, instruction) = create_burn_test_instruction(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -2002,8 +2026,9 @@ async fn failing_tests_burn() {
     }
     // 2. Signer is delegate but token data has no delegate.
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let burn_amount = 1;
         let change_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -2011,8 +2036,8 @@ async fn failing_tests_burn() {
             .merkle_tree_pubkey;
         let (_, _, _, _, instruction) = create_burn_test_instruction(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -2027,8 +2052,9 @@ async fn failing_tests_burn() {
     }
     // 3. Signer is delegate but token data has no delegate.
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
@@ -2041,8 +2067,8 @@ async fn failing_tests_burn() {
             .merkle_tree_pubkey;
         let (_, _, _, _, instruction) = create_burn_test_instruction(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -2057,8 +2083,9 @@ async fn failing_tests_burn() {
     }
     // 4. invalid authority (use delegate as authority)
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let burn_amount = 1;
         let change_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -2066,8 +2093,8 @@ async fn failing_tests_burn() {
             .merkle_tree_pubkey;
         let (_, _, _, _, instruction) = create_burn_test_instruction(
             &delegate,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -2082,8 +2109,9 @@ async fn failing_tests_burn() {
     }
     // 5. invalid mint
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let burn_amount = 1;
         let change_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -2091,8 +2119,8 @@ async fn failing_tests_burn() {
             .merkle_tree_pubkey;
         let (_, _, _, _, instruction) = create_burn_test_instruction(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &input_compressed_accounts,
             &change_account_merkle_tree,
             burn_amount,
@@ -2112,8 +2140,9 @@ async fn failing_tests_burn() {
     }
     // 6. invalid change merkle tree
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let burn_amount = 1;
         let invalid_change_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
@@ -2121,8 +2150,8 @@ async fn failing_tests_burn() {
             .nullifier_queue_pubkey;
         let (_, _, _, _, instruction) = create_burn_test_instruction(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             &input_compressed_accounts,
             &invalid_change_account_merkle_tree,
             burn_amount,
@@ -2149,23 +2178,23 @@ async fn failing_tests_burn() {
 /// 4. Freeze delegated tokens
 /// 5. Thaw delegated tokens
 async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     mint_tokens_helper_with_lamports(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -2176,8 +2205,9 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
     .await;
     // 1. Freeze tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let output_merkle_tree = input_compressed_accounts[0]
             .compressed_account
             .merkle_context
@@ -2185,8 +2215,8 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
 
         freeze_test(
             &payer,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &output_merkle_tree,
             None,
@@ -2195,8 +2225,9 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
     }
     // 2. Thaw tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.state == AccountState::Frozen)
@@ -2208,8 +2239,8 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
             .merkle_tree_pubkey;
         thaw_test(
             &payer,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &output_merkle_tree,
             None,
@@ -2218,16 +2249,17 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
     }
     // 3. Delegate tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let delegated_compressed_account_merkle_tree = input_compressed_accounts[0]
             .compressed_account
             .merkle_context
             .merkle_tree_pubkey;
         approve_test(
             &sender,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             delegated_amount,
             None,
@@ -2240,8 +2272,9 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
     }
     // 4. Freeze delegated tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let output_merkle_tree = input_compressed_accounts[0]
             .compressed_account
             .merkle_context
@@ -2249,8 +2282,8 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
 
         freeze_test(
             &payer,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &output_merkle_tree,
             None,
@@ -2259,8 +2292,9 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
     }
     // 5. Thaw delegated tokens
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.state == AccountState::Frozen)
@@ -2273,8 +2307,8 @@ async fn test_freeze_and_thaw(mint_amount: u64, delegated_amount: u64) {
 
         thaw_test(
             &payer,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &output_merkle_tree,
             None,
@@ -2300,24 +2334,24 @@ async fn test_freeze_and_thaw_10000() {
 /// 4. Freeze frozen compressed account.
 #[tokio::test]
 async fn test_failing_freeze() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -2326,8 +2360,10 @@ async fn test_failing_freeze() {
     )
     .await;
 
-    let input_compressed_accounts =
-        vec![test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey())[0].clone()];
+    let input_compressed_accounts = vec![test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await[0]
+        .clone()];
     let outputs_merkle_tree = input_compressed_accounts[0]
         .compressed_account
         .merkle_context
@@ -2347,7 +2383,7 @@ async fn test_failing_freeze() {
             Some(&input_merkle_tree_pubkeys),
             None,
             None,
-            &mut rpc,
+            &rpc,
         )
         .await;
     let context_payer = rpc.get_payer().insecure_clone();
@@ -2461,8 +2497,8 @@ async fn test_failing_freeze() {
     {
         freeze_test(
             &payer,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &outputs_merkle_tree,
             None,
@@ -2470,6 +2506,7 @@ async fn test_failing_freeze() {
         .await;
         let input_compressed_accounts = vec![test_indexer
             .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await
             .iter()
             .filter(|x| x.token_data.state == AccountState::Frozen)
             .cloned()
@@ -2494,7 +2531,7 @@ async fn test_failing_freeze() {
                 Some(&input_merkle_tree_pubkeys),
                 None,
                 None,
-                &mut rpc,
+                &rpc,
             )
             .await;
         let inputs = CreateInstructionInputs {
@@ -2532,24 +2569,24 @@ async fn test_failing_freeze() {
 /// 4. thaw compressed account which is not frozen
 #[tokio::test]
 async fn test_failing_thaw() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut rpc, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
     let delegate = Keypair::new();
-    airdrop_lamports(&mut rpc, &delegate.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &delegate.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -2560,8 +2597,10 @@ async fn test_failing_thaw() {
 
     // Freeze tokens
     {
-        let input_compressed_accounts =
-            vec![test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey())[0].clone()];
+        let input_compressed_accounts = vec![test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await[0]
+            .clone()];
         let output_merkle_tree = input_compressed_accounts[0]
             .compressed_account
             .merkle_context
@@ -2569,8 +2608,8 @@ async fn test_failing_thaw() {
 
         freeze_test(
             &payer,
-            &mut rpc,
-            &mut test_indexer,
+            &rpc,
+            &test_indexer,
             input_compressed_accounts,
             &output_merkle_tree,
             None,
@@ -2578,8 +2617,9 @@ async fn test_failing_thaw() {
         .await;
     }
 
-    let input_compressed_accounts =
-        test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+    let input_compressed_accounts = test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await;
     let input_compressed_accounts = input_compressed_accounts
         .iter()
         .filter(|x| x.token_data.state == AccountState::Frozen)
@@ -2604,7 +2644,7 @@ async fn test_failing_thaw() {
             Some(&input_merkle_tree_pubkeys),
             None,
             None,
-            &mut rpc,
+            &rpc,
         )
         .await;
     let context_payer = rpc.get_payer().insecure_clone();
@@ -2716,8 +2756,9 @@ async fn test_failing_thaw() {
     }
     // 4. thaw compressed account which is not frozen
     {
-        let input_compressed_accounts =
-            test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+        let input_compressed_accounts = test_indexer
+            .get_compressed_token_accounts_by_owner(&sender.pubkey())
+            .await;
         let input_compressed_accounts = input_compressed_accounts
             .iter()
             .filter(|x| x.token_data.state == AccountState::Initialized)
@@ -2742,7 +2783,7 @@ async fn test_failing_thaw() {
                 Some(&input_merkle_tree_pubkeys),
                 None,
                 None,
-                &mut rpc,
+                &rpc,
             )
             .await;
         let inputs = CreateInstructionInputs {
@@ -2785,20 +2826,20 @@ async fn test_failing_thaw() {
 /// 9. Invalid compression amount 0
 #[tokio::test]
 async fn test_failing_decompression() {
-    let (mut context, env) = setup_test_programs_with_accounts(None).await;
+    let (context, env) = setup_test_programs_with_accounts(None).await;
     let payer = context.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let sender = Keypair::new();
-    airdrop_lamports(&mut context, &sender.pubkey(), 1_000_000_000)
+    airdrop_lamports(&context, &sender.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut context, &payer).await;
+    let mint = create_mint_helper(&context, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -2807,19 +2848,20 @@ async fn test_failing_decompression() {
     )
     .await;
     let token_account_keypair = Keypair::new();
-    create_token_account(&mut context, &mint, &token_account_keypair, &sender)
+    create_token_account(&context, &mint, &token_account_keypair, &sender)
         .await
         .unwrap();
-    let input_compressed_account =
-        test_indexer.get_compressed_token_accounts_by_owner(&sender.pubkey());
+    let input_compressed_account = test_indexer
+        .get_compressed_token_accounts_by_owner(&sender.pubkey())
+        .await;
     let decompress_amount = amount - 1000;
     // Test 1: invalid decompress account
     {
         let invalid_token_account = mint;
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             decompress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2836,13 +2878,13 @@ async fn test_failing_decompression() {
     // Test 2: invalid token pool pda (compress and decompress)
     {
         let invalid_token_account_keypair = Keypair::new();
-        create_token_account(&mut context, &mint, &invalid_token_account_keypair, &payer)
+        create_token_account(&context, &mint, &invalid_token_account_keypair, &payer)
             .await
             .unwrap();
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             decompress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2857,13 +2899,13 @@ async fn test_failing_decompression() {
         .unwrap();
 
         let invalid_token_account_keypair = Keypair::new();
-        create_token_account(&mut context, &mint, &invalid_token_account_keypair, &payer)
+        create_token_account(&context, &mint, &invalid_token_account_keypair, &payer)
             .await
             .unwrap();
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             0, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2881,8 +2923,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             decompress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2900,8 +2942,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             decompress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2919,8 +2961,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             decompress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2938,8 +2980,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             input_compressed_account.clone(),
             decompress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2957,8 +2999,8 @@ async fn test_failing_decompression() {
     // functional so that we have tokens to compress
     decompress_test(
         &sender,
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         input_compressed_account,
         amount,
         &merkle_tree_pubkey,
@@ -2971,8 +3013,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             Vec::new(),
             compress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -2990,8 +3032,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             Vec::new(),
             compress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -3009,8 +3051,8 @@ async fn test_failing_decompression() {
     {
         failing_compress_decompress(
             &sender,
-            &mut context,
-            &mut test_indexer,
+            &context,
+            &test_indexer,
             Vec::new(),
             compress_amount, // needs to be consistent with compression amount
             &merkle_tree_pubkey,
@@ -3027,8 +3069,8 @@ async fn test_failing_decompression() {
     // functional
     compress_test(
         &sender,
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         amount,
         &mint,
         &merkle_tree_pubkey,
@@ -3042,8 +3084,8 @@ async fn test_failing_decompression() {
 #[allow(clippy::too_many_arguments)]
 pub async fn failing_compress_decompress<R: RpcConnection>(
     payer: &Keypair,
-    rpc: &mut R,
-    test_indexer: &mut TestIndexer<R>,
+    rpc: &R,
+    test_indexer: &TestIndexer<R>,
     input_compressed_accounts: Vec<TokenDataWithContext>,
     amount: u64,
     output_merkle_tree_pubkey: &Pubkey,
@@ -3177,21 +3219,21 @@ pub async fn failing_compress_decompress<R: RpcConnection>(
 /// 12. invalid Merkle tree pubkey (ProofVerificationFailed)
 #[tokio::test]
 async fn test_invalid_inputs() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
     let payer = rpc.get_payer().insecure_clone();
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
     let nullifier_queue_pubkey = env.nullifier_queue_pubkey;
-    let mut test_indexer =
+    let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, false).await;
     let recipient_keypair = Keypair::new();
-    airdrop_lamports(&mut rpc, &recipient_keypair.pubkey(), 1_000_000_000)
+    airdrop_lamports(&rpc, &recipient_keypair.pubkey(), 1_000_000_000)
         .await
         .unwrap();
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &merkle_tree_pubkey,
         &payer,
         &mint,
@@ -3201,9 +3243,11 @@ async fn test_invalid_inputs() {
     .await;
     let payer = recipient_keypair.insecure_clone();
     let transfer_recipient_keypair = Keypair::new();
-    let input_compressed_account_token_data =
-        test_indexer.token_compressed_accounts[0].token_data.clone();
-    let input_compressed_accounts = vec![test_indexer.token_compressed_accounts[0]
+    let indexer_state = test_indexer.state.read().await;
+    let input_compressed_account_token_data = indexer_state.token_compressed_accounts[0]
+        .token_data
+        .clone();
+    let input_compressed_accounts = vec![indexer_state.token_compressed_accounts[0]
         .compressed_account
         .clone()];
     let proof_rpc_result = test_indexer
@@ -3214,7 +3258,7 @@ async fn test_invalid_inputs() {
                 .merkle_tree_pubkey]),
             None,
             None,
-            &mut rpc,
+            &rpc,
         )
         .await;
     let change_out_compressed_account_0 = TokenTransferOutputData {
@@ -3235,7 +3279,7 @@ async fn test_invalid_inputs() {
         transfer_recipient_out_compressed_account_0.amount += 1;
         // Test 1: invalid token data amount (+ 1)
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &merkle_tree_pubkey,
@@ -3260,7 +3304,7 @@ async fn test_invalid_inputs() {
         };
         // invalid token data amount (- 1)
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &merkle_tree_pubkey,
@@ -3285,7 +3329,7 @@ async fn test_invalid_inputs() {
         };
         // invalid token data zero out amount
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             zero_amount,
             zero_amount,
             &merkle_tree_pubkey,
@@ -3309,7 +3353,7 @@ async fn test_invalid_inputs() {
         };
         // invalid double token data  amount
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             double_amount,
             double_amount,
             &merkle_tree_pubkey,
@@ -3333,7 +3377,7 @@ async fn test_invalid_inputs() {
             merkle_tree: merkle_tree_pubkey,
         };
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             double_amount,
             double_amount,
             &merkle_tree_pubkey,
@@ -3350,10 +3394,12 @@ async fn test_invalid_inputs() {
     }
     // Test 5: invalid input token data amount (0)
     {
-        let mut input_compressed_account_token_data_invalid_amount =
-            test_indexer.token_compressed_accounts[0].token_data.clone();
+        let mut input_compressed_account_token_data_invalid_amount = indexer_state
+            .token_compressed_accounts[0]
+            .token_data
+            .clone();
         input_compressed_account_token_data_invalid_amount.amount = 0;
-        let mut input_compressed_accounts = vec![test_indexer.token_compressed_accounts[0]
+        let mut input_compressed_accounts = vec![indexer_state.token_compressed_accounts[0]
             .compressed_account
             .clone()];
         crate::TokenData::serialize(
@@ -3381,7 +3427,7 @@ async fn test_invalid_inputs() {
         };
 
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &merkle_tree_pubkey,
@@ -3398,10 +3444,11 @@ async fn test_invalid_inputs() {
     }
     // Test 6: invalid delegate
     {
-        let mut input_compressed_account_token_data =
-            test_indexer.token_compressed_accounts[0].token_data.clone();
+        let mut input_compressed_account_token_data = indexer_state.token_compressed_accounts[0]
+            .token_data
+            .clone();
         input_compressed_account_token_data.delegate = Some(Pubkey::new_unique());
-        let mut input_compressed_accounts = vec![test_indexer.token_compressed_accounts[0]
+        let mut input_compressed_accounts = vec![indexer_state.token_compressed_accounts[0]
             .compressed_account
             .clone()];
         let mut vec = Vec::new();
@@ -3413,7 +3460,7 @@ async fn test_invalid_inputs() {
             .unwrap()
             .data = vec;
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &merkle_tree_pubkey,
@@ -3432,7 +3479,7 @@ async fn test_invalid_inputs() {
     {
         let invalid_payer = rpc.get_payer().insecure_clone();
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &merkle_tree_pubkey,
@@ -3452,7 +3499,7 @@ async fn test_invalid_inputs() {
         let mut root_indices = proof_rpc_result.root_indices.clone();
         root_indices[0] += 1;
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &merkle_tree_pubkey,
@@ -3470,7 +3517,7 @@ async fn test_invalid_inputs() {
     // Test 11: invalid mint
     {
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &nullifier_queue_pubkey,
@@ -3491,7 +3538,7 @@ async fn test_invalid_inputs() {
     // Test 12: invalid Merkle tree pubkey
     {
         let res = perform_transfer_failing_test(
-            &mut rpc,
+            &rpc,
             change_out_compressed_account_0,
             transfer_recipient_out_compressed_account_0,
             &nullifier_queue_pubkey,
@@ -3515,7 +3562,7 @@ async fn test_invalid_inputs() {
 
 #[allow(clippy::too_many_arguments)]
 async fn perform_transfer_failing_test<R: RpcConnection>(
-    rpc: &mut R,
+    rpc: &R,
     change_token_transfer_output: TokenTransferOutputData,
     transfer_recipient_token_transfer_output: TokenTransferOutputData,
     merkle_tree_pubkey: &Pubkey,
@@ -3574,7 +3621,7 @@ async fn perform_transfer_failing_test<R: RpcConnection>(
     )
     .unwrap();
 
-    let latest_blockhash = rpc.get_latest_blockhash().await.unwrap();
+    let latest_blockhash = rpc.get_latest_blockhash().await?;
     let transaction = Transaction::new_signed_with_payer(
         &[instruction],
         Some(&payer.pubkey()),

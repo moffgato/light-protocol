@@ -1,4 +1,5 @@
 #![cfg(feature = "test-sbf")]
+
 use account_compression::errors::AccountCompressionErrorCode;
 use anchor_lang::error::ErrorCode;
 use anchor_lang::{AnchorSerialize, InstructionData, ToAccountMetas};
@@ -45,8 +46,9 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use solana_sdk::{signature::Keypair, transaction::TransactionError};
+use std::sync::Arc;
 use tokio::fs::write as async_write;
-
+use tokio::sync::RwLock;
 // TODO: use lazy_static to spawn the server once
 
 /// invoke_failing_test
@@ -179,8 +181,7 @@ pub async fn failing_transaction_inputs(
             &env.merkle_tree_pubkey,
             None,
         )
-        .await
-        .unwrap();
+        .await?;
     }
     let (mut new_address_params, derived_addresses) =
         create_address_test_inputs(env, num_addresses);
@@ -1008,7 +1009,8 @@ async fn invoke_test() {
     // create Merkle proof
     // get zkp from server
     // create instruction as usual with correct zkp
-    let compressed_account_with_context = test_indexer.compressed_accounts[0].clone();
+    let indexer_state = test_indexer.state.read().await;
+    let compressed_account_with_context = indexer_state.compressed_accounts[0].clone();
     let proof_rpc_res = test_indexer
         .create_proof_for_compressed_accounts(
             Some(&[compressed_account_with_context
@@ -1200,7 +1202,8 @@ async fn test_with_address() {
     // transfer with address
     println!("transfer with address-------------------------");
 
-    let compressed_account_with_context = test_indexer.compressed_accounts[0].clone();
+    let indexer_state = test_indexer.state.read().await;
+    let compressed_account_with_context = indexer_state.compressed_accounts[0].clone();
     let recipient_pubkey = Keypair::new().pubkey();
     transfer_compressed_sol_test(
         &mut context,
@@ -1215,16 +1218,18 @@ async fn test_with_address() {
     )
     .await
     .unwrap();
-    assert_eq!(test_indexer.compressed_accounts.len(), 1);
+    assert_eq!(indexer_state.compressed_accounts.len(), 1);
     assert_eq!(
-        test_indexer.compressed_accounts[0]
+        indexer_state.compressed_accounts[0]
             .compressed_account
             .address
             .unwrap(),
         derived_address
     );
     assert_eq!(
-        test_indexer.compressed_accounts[0].compressed_account.owner,
+        indexer_state.compressed_accounts[0]
+            .compressed_account
+            .owner,
         recipient_pubkey
     );
 
@@ -1400,8 +1405,8 @@ async fn test_with_compression() {
         .unwrap();
 
     compress_sol_test(
-        &mut context,
-        &mut test_indexer,
+        &context,
+        &test_indexer,
         &payer,
         &Vec::new(),
         false,
@@ -1412,7 +1417,8 @@ async fn test_with_compression() {
     .await
     .unwrap();
 
-    let compressed_account_with_context = test_indexer.compressed_accounts.last().unwrap().clone();
+    let indexer_state = test_indexer.state.read().await;
+    let compressed_account_with_context = indexer_state.compressed_accounts.last().unwrap().clone();
     let proof_rpc_res = test_indexer
         .create_proof_for_compressed_accounts(
             Some(&[compressed_account_with_context
@@ -1504,6 +1510,7 @@ async fn regenerate_accounts() {
     };
 
     let context = setup_test_programs(None).await;
+    let context = Arc::new(RwLock::new(context));
     let mut context = ProgramTestRpcConnection { context };
     let mut keypairs = EnvAccountKeypairs::from_target_folder();
     keypairs.governance_authority = Keypair::from_bytes(&PAYER_KEYPAIR).unwrap();

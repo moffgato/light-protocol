@@ -47,18 +47,18 @@ use system_cpi_test::{CreatePdaMode, ID};
 /// 13. Create program owned account without data (DataFieldUndefined)
 #[tokio::test]
 async fn only_test_create_pda() {
-    let (mut rpc, env) =
+    let (rpc, env) =
         setup_test_programs_with_accounts(Some(vec![(String::from("system_cpi_test"), ID)])).await;
     let payer = rpc.get_payer().insecure_clone();
-    let mut test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
+    let test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
 
     let seed = [1u8; 32];
     let data = [2u8; 31];
 
     // Functional test 1 ----------------------------------------------
     perform_create_pda_with_event(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env,
         &payer,
         seed,
@@ -69,15 +69,15 @@ async fn only_test_create_pda() {
     .await
     .unwrap();
 
-    assert_created_pda(&mut test_indexer, &env, &payer, &seed, &data).await;
+    assert_created_pda(&test_indexer, &env, &payer, &seed, &data).await;
 
     let seed = [2u8; 32];
     let data = [3u8; 31];
 
     // Failing 2 invoking program ----------------------------------------------
     perform_create_pda_failing(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env,
         &payer,
         seed,
@@ -91,8 +91,8 @@ async fn only_test_create_pda() {
 
     // Failing 3 write to account not owned ----------------------------------------------
     perform_create_pda_failing(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env,
         &payer,
         seed,
@@ -112,7 +112,7 @@ async fn only_test_create_pda() {
 
     test_indexer
         .add_state_merkle_tree(
-            &mut rpc,
+            &rpc,
             &program_owned_merkle_tree_keypair,
             &program_owned_queue_keypair,
             &program_owned_cpi_context_keypair,
@@ -120,12 +120,12 @@ async fn only_test_create_pda() {
             None,
         )
         .await;
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
 
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &program_owned_merkle_tree_keypair.pubkey(),
         &payer,
         &mint,
@@ -140,8 +140,8 @@ async fn only_test_create_pda() {
     .clone();
     // Failing 4 input account that is not owned by signer ----------------------------------------------
     perform_with_input_accounts(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &payer,
         None,
         &compressed_account,
@@ -155,8 +155,8 @@ async fn only_test_create_pda() {
         let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
         // Failing 5 provide cpi context but no cpi context account ----------------------------------------------
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -168,8 +168,8 @@ async fn only_test_create_pda() {
         .unwrap();
         // Failing 6 provide cpi context account but no cpi context ----------------------------------------------
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -181,8 +181,8 @@ async fn only_test_create_pda() {
         .unwrap();
         // Failing 7 provide cpi context account but cpi context is empty ----------------------------------------------
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -194,8 +194,8 @@ async fn only_test_create_pda() {
         .unwrap();
         // Failing 8 test signer checks trying to insert into cpi context account (invalid invoking program) ----------------------------------------------
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -209,8 +209,8 @@ async fn only_test_create_pda() {
             test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
         // Failing 10 provide cpi context account but cpi context has a different proof ----------------------------------------------
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -222,8 +222,8 @@ async fn only_test_create_pda() {
         .unwrap();
         // Failing 11 write to account not owned ----------------------------------------------
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -245,8 +245,8 @@ async fn only_test_create_pda() {
             let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
             let keypair = Keypair::from_bytes(&CPI_SYSTEM_TEST_PROGRAM_ID_KEYPAIR).unwrap();
             let result = transfer_compressed_sol_test(
-                &mut rpc,
-                &mut test_indexer,
+                &rpc,
+                &test_indexer,
                 &keypair,
                 &[compressed_account],
                 &[Pubkey::new_unique()],
@@ -258,8 +258,8 @@ async fn only_test_create_pda() {
         }
         // Failing 13 DataFieldUndefined ----------------------------------------------
         perform_create_pda_failing(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &env,
             &payer,
             seed,
@@ -608,8 +608,8 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_create_pda_failing<R: RpcConnection>(
-    test_indexer: &mut TestIndexer<R>,
-    rpc: &mut R,
+    test_indexer: &TestIndexer<R>,
+    rpc: &R,
     env: &EnvAccounts,
     payer: &Keypair,
     seed: [u8; 32],
@@ -634,7 +634,7 @@ pub async fn perform_create_pda_failing<R: RpcConnection>(
         &[instruction],
         Some(&payer_pubkey),
         &[&payer],
-        rpc.get_latest_blockhash().await.unwrap(),
+        rpc.get_latest_blockhash().await?,
     );
     let result = rpc.process_transaction(transaction).await;
     assert_rpc_error(result, 0, expected_error_code)
@@ -642,8 +642,8 @@ pub async fn perform_create_pda_failing<R: RpcConnection>(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_create_pda_with_event<R: RpcConnection>(
-    test_indexer: &mut TestIndexer<R>,
-    rpc: &mut R,
+    test_indexer: &TestIndexer<R>,
+    rpc: &R,
     env: &EnvAccounts,
     payer: &Keypair,
     seed: [u8; 32],
@@ -668,7 +668,9 @@ pub async fn perform_create_pda_with_event<R: RpcConnection>(
         .create_and_send_transaction_with_event(&[instruction], &payer_pubkey, &[payer], None)
         .await?
         .unwrap();
-    test_indexer.add_compressed_accounts_with_token_data(&event.0);
+    test_indexer
+        .add_compressed_accounts_with_token_data(&event.0)
+        .await;
     Ok(())
 }
 
@@ -676,8 +678,8 @@ pub async fn perform_create_pda_with_event<R: RpcConnection>(
 async fn perform_create_pda<R: RpcConnection>(
     env: &EnvAccounts,
     seed: [u8; 32],
-    test_indexer: &mut TestIndexer<R>,
-    rpc: &mut R,
+    test_indexer: &TestIndexer<R>,
+    rpc: &R,
     data: &[u8; 31],
     payer_pubkey: Pubkey,
     owner_program: &Pubkey,
@@ -716,13 +718,14 @@ async fn perform_create_pda<R: RpcConnection>(
 }
 
 pub async fn assert_created_pda<R: RpcConnection>(
-    test_indexer: &mut TestIndexer<R>,
+    test_indexer: &TestIndexer<R>,
     env: &EnvAccounts,
     payer: &Keypair,
     seed: &[u8; 32],
     data: &[u8; 31],
 ) {
-    let compressed_escrow_pda = test_indexer
+    let indexer_state = test_indexer.state.read().await;
+    let compressed_escrow_pda = indexer_state
         .compressed_accounts
         .iter()
         .find(|x| x.compressed_account.owner == ID)
@@ -807,7 +810,8 @@ pub async fn perform_with_input_accounts<R: RpcConnection>(
         }),
         _ => None,
     };
-    let cpi_context_account_pubkey = test_indexer
+    let indexer_state = test_indexer.state.read().await;
+    let cpi_context_account_pubkey = indexer_state
         .state_merkle_trees
         .iter()
         .find(|x| x.accounts.merkle_tree == merkle_tree_pubkey)
@@ -890,7 +894,9 @@ pub async fn perform_with_input_accounts<R: RpcConnection>(
     if expected_error_code == u32::MAX {
         let result = result?.unwrap();
 
-        test_indexer.add_compressed_accounts_with_token_data(&result.0);
+        test_indexer
+            .add_compressed_accounts_with_token_data(&result.0)
+            .await;
         Ok(())
     } else {
         assert_rpc_error(result, 0, expected_error_code)

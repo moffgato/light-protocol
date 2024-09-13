@@ -69,7 +69,7 @@ impl SlotTracker {
 }
 
 pub async fn wait_until_slot_reached<R: RpcConnection>(
-    rpc: &mut R,
+    rpc: &R,
     slot_tracker: &Arc<SlotTracker>,
     target_slot: u64,
 ) -> crate::Result<()> {
