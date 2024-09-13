@@ -142,7 +142,7 @@ async fn test_initialize_protocol_config() {
     let rpc = Arc::new(RwLock::new(rpc));
     let rpc = ProgramTestRpcConnection { context: rpc };
 
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let program_account_keypair = Keypair::from_bytes(&OLD_REGISTRY_ID_TEST_KEYPAIR).unwrap();
     let protocol_config = ProtocolConfig::default();
     let (protocol_config_pda, bump) = get_protocol_config_pda_address();
@@ -501,7 +501,7 @@ async fn test_custom_forester() {
         false,
     )
     .await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     {
         let unregistered_forester_keypair = Keypair::new();
         rpc.airdrop_lamports(&unregistered_forester_keypair.pubkey(), 1_000_000_000)
@@ -571,7 +571,7 @@ async fn test_custom_forester() {
 /// 3. SUCCESS: Register forester for epoch
 #[tokio::test]
 async fn test_register_and_update_forester_pda() {
-    let (mut rpc, env) = setup_test_programs_with_accounts_with_protocol_config(
+    let (rpc, env) = setup_test_programs_with_accounts_with_protocol_config(
         None,
         ProtocolConfig::default(),
         false,
@@ -584,7 +584,7 @@ async fn test_register_and_update_forester_pda() {
     let config = ForesterConfig { fee: 1 };
     // 1. SUCCESS: Register a forester
     register_test_forester(
-        &mut rpc,
+        &rpc,
         &env.governance_authority,
         &forester_keypair.pubkey(),
         config,
@@ -600,7 +600,7 @@ async fn test_register_and_update_forester_pda() {
     let config = ForesterConfig { fee: 2 };
 
     update_test_forester(
-        &mut rpc,
+        &rpc,
         &forester_keypair,
         &forester_keypair.pubkey(),
         Some(&new_forester_keypair),
@@ -610,7 +610,7 @@ async fn test_register_and_update_forester_pda() {
     .unwrap();
     // change the forester authority back
     update_test_forester(
-        &mut rpc,
+        &rpc,
         &new_forester_keypair,
         &forester_keypair.pubkey(),
         Some(&forester_keypair),
@@ -676,7 +676,7 @@ async fn test_register_and_update_forester_pda() {
         },
     ];
 
-    let registered_epoch = Epoch::register(&mut rpc, &protocol_config, &forester_keypair)
+    let registered_epoch = Epoch::register(&rpc, &protocol_config, &forester_keypair)
         .await
         .unwrap();
     assert!(registered_epoch.is_some());
@@ -690,9 +690,9 @@ async fn test_register_and_update_forester_pda() {
     assert_eq!(forester_epoch_pda.epoch, 0);
     let epoch = 0;
     let expected_stake = 1;
-    assert_epoch_pda(&mut rpc, epoch, expected_stake).await;
+    assert_epoch_pda(&rpc, epoch, expected_stake).await;
     assert_registered_forester_pda(
-        &mut rpc,
+        &rpc,
         &registered_epoch.forester_epoch_pda,
         &forester_keypair.pubkey(),
         epoch,
@@ -706,7 +706,7 @@ async fn test_register_and_update_forester_pda() {
     // finalize registration
     {
         registered_epoch
-            .fetch_account_and_add_trees_with_schedule(&mut rpc, &tree_accounts)
+            .fetch_account_and_add_trees_with_schedule(&rpc, &tree_accounts)
             .await
             .unwrap();
         let ix = create_finalize_registration_instruction(
@@ -717,7 +717,7 @@ async fn test_register_and_update_forester_pda() {
             .await
             .unwrap();
         assert_finalized_epoch_registration(
-            &mut rpc,
+            &rpc,
             &registered_epoch.forester_epoch_pda,
             &registered_epoch.epoch_pda,
         )
@@ -822,12 +822,12 @@ async fn test_register_and_update_forester_pda() {
 /// 6. FAIL: Rollover state tree with invalid authority
 #[tokio::test]
 async fn failing_test_forester() {
-    let (mut rpc, env) = setup_test_programs_with_accounts(None).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let (rpc, env) = setup_test_programs_with_accounts(None).await;
+    let payer = rpc.get_payer().await;
     // 1. FAIL: Register a forester pda with invalid authority
     {
         let result = register_test_forester(
-            &mut rpc,
+            &rpc,
             &payer,
             &Keypair::new().pubkey(),
             ForesterConfig::default(),
@@ -903,7 +903,7 @@ async fn failing_test_forester() {
     // 4 FAIL: update address Merkle tree failed
     {
         let expected_error_code = RegistryError::InvalidForester as u32 + 6000;
-        let authority = rpc.get_payer().insecure_clone();
+        let authority = rpc.get_payer().await;
         let mut instruction = create_update_address_merkle_tree_instruction(
             UpdateAddressMerkleTreeInstructionInputs {
                 authority: authority.pubkey(),
@@ -936,9 +936,9 @@ async fn failing_test_forester() {
         let new_queue_keypair = Keypair::new();
         let new_merkle_tree_keypair = Keypair::new();
         let expected_error_code = RegistryError::InvalidForester as u32 + 6000;
-        let authority = rpc.get_payer().insecure_clone();
+        let authority = rpc.get_payer().await;
         let mut instructions = create_rollover_address_merkle_tree_instructions(
-            &mut rpc,
+            &rpc,
             &authority.pubkey(),
             &new_queue_keypair,
             &new_merkle_tree_keypair,
@@ -968,9 +968,9 @@ async fn failing_test_forester() {
         let new_state_merkle_tree_keypair = Keypair::new();
         let new_cpi_context = Keypair::new();
         let expected_error_code = RegistryError::InvalidForester as u32 + 6000;
-        let authority = rpc.get_payer().insecure_clone();
+        let authority = rpc.get_payer().await;
         let mut instructions = create_rollover_state_merkle_tree_instructions(
-            &mut rpc,
+            &rpc,
             &authority.pubkey(),
             &new_nullifier_queue_keypair,
             &new_state_merkle_tree_keypair,
@@ -1021,7 +1021,7 @@ async fn update_forester_on_testnet() {
     let updated_keypair = read_keypair_file("../../target/forester-keypair.json").unwrap();
     println!("updated keypair: {:?}", updated_keypair.pubkey());
     update_test_forester(
-        &mut rpc,
+        &rpc,
         &env_accounts.forester,
         &env_accounts.forester.pubkey(),
         Some(&updated_keypair),
@@ -1042,7 +1042,7 @@ async fn update_forester_on_testnet() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn update_registry_governance_on_testnet() {
     let env_accounts = get_test_env_accounts();
-    let mut rpc = SolanaRpcConnection::new(SolanaRpcUrl::ZKTestnet, None);
+    let rpc = SolanaRpcConnection::new(SolanaRpcUrl::ZKTestnet, None);
     rpc.airdrop_lamports(
         &env_accounts.governance_authority.pubkey(),
         LAMPORTS_PER_SOL * 100,

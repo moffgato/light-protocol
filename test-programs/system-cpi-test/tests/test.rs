@@ -49,7 +49,7 @@ use system_cpi_test::{CreatePdaMode, ID};
 async fn only_test_create_pda() {
     let (rpc, env) =
         setup_test_programs_with_accounts(Some(vec![(String::from("system_cpi_test"), ID)])).await;
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
 
     let seed = [1u8; 32];
@@ -134,7 +134,7 @@ async fn only_test_create_pda() {
     )
     .await;
 
-    let compressed_account = test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())
+    let compressed_account = test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await
         [0]
     .compressed_account
     .clone();
@@ -152,7 +152,7 @@ async fn only_test_create_pda() {
     .await
     .unwrap();
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         // Failing 5 provide cpi context but no cpi context account ----------------------------------------------
         perform_with_input_accounts(
             &test_indexer,
@@ -206,7 +206,7 @@ async fn only_test_create_pda() {
         .await
         .unwrap();
         let compressed_token_account_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         // Failing 10 provide cpi context account but cpi context has a different proof ----------------------------------------------
         perform_with_input_accounts(
             &test_indexer,
@@ -242,7 +242,7 @@ async fn only_test_create_pda() {
                 26, 211, 193, 195, 11, 219, 9, 155, 58, 172, 58, 200, 254, 75, 231, 106, 31, 168,
                 183, 76, 179, 113, 234, 101, 191, 99, 156, 98,
             ];
-            let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+            let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
             let keypair = Keypair::from_bytes(&CPI_SYSTEM_TEST_PROGRAM_ID_KEYPAIR).unwrap();
             let result = transfer_compressed_sol_test(
                 &rpc,
@@ -285,16 +285,16 @@ async fn only_test_create_pda() {
 /// 5. Burn
 #[tokio::test]
 async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
-    let (mut rpc, env) =
+    let (rpc, env) =
         setup_test_programs_with_accounts(Some(vec![(String::from("system_cpi_test"), ID)])).await;
 
-    let payer = rpc.get_payer().insecure_clone();
-    let mut test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
-    let mint = create_mint_helper(&mut rpc, &payer).await;
+    let payer = rpc.get_payer().await;
+    let test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
+    let mint = create_mint_helper(&rpc, &payer).await;
     let amount = 10000u64;
     mint_tokens_helper(
-        &mut rpc,
-        &mut test_indexer,
+        &rpc,
+        &test_indexer,
         &env.merkle_tree_pubkey,
         &payer,
         &mint,
@@ -306,8 +306,8 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
     let seed = [1u8; 32];
     let data = [2u8; 31];
     perform_create_pda_with_event(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env,
         &payer,
         seed,
@@ -320,15 +320,15 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
     let delegate = Keypair::new();
 
     let ref_compressed_token_data =
-        test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+        test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
     // 1. Approve functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             Some(&delegate),
             &compressed_account,
@@ -339,7 +339,7 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         .await
         .unwrap();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         let mut ref_data = ref_compressed_token_data.token_data.clone();
         ref_data.delegate = Some(delegate.pubkey());
         assert_eq!(compressed_token_data.token_data, ref_data);
@@ -350,16 +350,17 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
     }
     // 2. Revoke functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         let compressed_token_data = test_indexer
             .get_compressed_token_accounts_by_owner(&payer.pubkey())
+            .await
             .iter()
             .filter(|x| x.token_data.delegate.is_some())
             .collect::<Vec<_>>()[0]
             .clone();
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             Some(&delegate),
             &compressed_account,
@@ -370,18 +371,18 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         .await
         .unwrap();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         let ref_data = ref_compressed_token_data.token_data.clone();
         assert_eq!(compressed_token_data.token_data, ref_data);
     }
     // 3. Freeze functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -392,19 +393,19 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         .await
         .unwrap();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         let mut ref_data = ref_compressed_token_data.token_data.clone();
         ref_data.state = AccountState::Frozen;
         assert_eq!(compressed_token_data.token_data, ref_data);
     }
     // 4. Thaw functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -415,18 +416,18 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         .await
         .unwrap();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         let ref_data = ref_compressed_token_data.token_data.clone();
         assert_eq!(compressed_token_data.token_data, ref_data);
     }
     // 5. Burn functional with cpi context
     {
-        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID)[0].clone();
+        let compressed_account = test_indexer.get_compressed_accounts_by_owner(&ID).await[0].clone();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         perform_with_input_accounts(
-            &mut test_indexer,
-            &mut rpc,
+            &test_indexer,
+            &rpc,
             &payer,
             None,
             &compressed_account,
@@ -437,7 +438,7 @@ async fn test_approve_revoke_burn_freeze_thaw_with_cpi_context() {
         .await
         .unwrap();
         let compressed_token_data =
-            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey())[0].clone();
+            test_indexer.get_compressed_token_accounts_by_owner(&payer.pubkey()).await[0].clone();
         let mut ref_data = ref_compressed_token_data.token_data.clone();
         ref_data.amount = 1;
         assert_eq!(compressed_token_data.token_data, ref_data);
@@ -452,7 +453,7 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
     let (mut rpc, env) =
         setup_test_programs_with_accounts(Some(vec![(String::from("system_cpi_test"), ID)])).await;
 
-    let payer = rpc.get_payer().insecure_clone();
+    let payer = rpc.get_payer().await;
     let mut test_indexer = TestIndexer::init_from_env(&payer, &env, true, true).await;
     // Failing test 1 invalid address Merkle tree ----------------------------------------------
     let program_owned_address_merkle_tree_keypair = Keypair::new();
@@ -460,7 +461,7 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
 
     test_indexer
         .add_address_merkle_tree(
-            &mut rpc,
+            &rpc,
             &program_owned_address_merkle_tree_keypair,
             &program_owned_address_queue_keypair,
             Some(light_compressed_token::ID),
@@ -483,8 +484,8 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
     };
 
     perform_create_pda_failing(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env_with_program_owned_address_merkle_tree,
         &payer,
         [3u8; 32],
@@ -503,7 +504,7 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
 
     test_indexer
         .add_state_merkle_tree(
-            &mut rpc,
+            &rpc,
             &program_owned_state_merkle_tree_keypair,
             &program_owned_state_queue_keypair,
             &program_owned_cpi_context_keypair,
@@ -527,8 +528,8 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
         forester_epoch: env.forester_epoch.clone(),
     };
     perform_create_pda_failing(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env_with_program_owned_state_merkle_tree,
         &payer,
         [3u8; 32],
@@ -547,7 +548,7 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
 
     test_indexer
         .add_state_merkle_tree(
-            &mut rpc,
+            &rpc,
             &program_owned_state_merkle_tree_keypair,
             &program_owned_state_queue_keypair,
             &program_owned_cpi_context_keypair,
@@ -560,7 +561,7 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
 
     test_indexer
         .add_address_merkle_tree(
-            &mut rpc,
+            &rpc,
             &program_owned_address_merkle_tree_keypair,
             &program_owned_address_queue_keypair,
             Some(ID),
@@ -584,8 +585,8 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
     let seed = [4u8; 32];
     let data = [5u8; 31];
     perform_create_pda_with_event(
-        &mut test_indexer,
-        &mut rpc,
+        &test_indexer,
+        &rpc,
         &env_with_program_owned_state_merkle_tree,
         &payer,
         seed,
@@ -597,7 +598,7 @@ async fn test_create_pda_in_program_owned_merkle_trees() {
     .unwrap();
 
     assert_created_pda(
-        &mut test_indexer,
+        &test_indexer,
         &env_with_program_owned_state_merkle_tree,
         &payer,
         &seed,
@@ -764,8 +765,8 @@ pub async fn assert_created_pda<R: RpcConnection>(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_with_input_accounts<R: RpcConnection>(
-    test_indexer: &mut TestIndexer<R>,
-    rpc: &mut R,
+    test_indexer: &TestIndexer<R>,
+    rpc: &R,
     payer: &Keypair,
     fee_payer: Option<&Keypair>,
     compressed_account: &CompressedAccountWithMerkleContext,
