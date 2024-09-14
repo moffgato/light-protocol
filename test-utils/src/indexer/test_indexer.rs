@@ -131,13 +131,14 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
         &self,
         owner: &Pubkey,
     ) -> Result<Vec<String>, IndexerError> {
-        let result = self.get_compressed_accounts_by_owner(owner).await;
-        let mut hashes: Vec<String> = Vec::new();
-        for account in result.iter() {
-            let hash = account.hash()?;
-            let bs58_hash = bs58::encode(hash).into_string();
-            hashes.push(bs58_hash);
-        }
+        let compressed_accounts = self.get_compressed_accounts_by_owner(owner).await;
+        let hashes = compressed_accounts
+            .iter()
+            .map(|account| {
+                let hash = account.hash()?;
+                Ok(bs58::encode(hash).into_string())
+            })
+            .collect::<Result<Vec<String>, IndexerError>>()?;
         Ok(hashes)
     }
 

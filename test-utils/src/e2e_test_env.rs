@@ -430,7 +430,7 @@ where
                     &self.foresters,
                     self.slot,
                 ) {
-                    // TODO: add newly addeded trees to foresters
+                    // TODO: add newly added trees to foresters
                     nullify_compressed_accounts(
                         &self.rpc,
                         &payer,

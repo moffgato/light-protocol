@@ -61,14 +61,18 @@ impl RpcConnection for ProgramTestRpcConnection {
     }
 
     async fn process_transaction(&self, transaction: Transaction) -> Result<Signature, RpcError> {
-        let mut context = self.context.write().await;
         let sig = *transaction.signatures.first().unwrap();
-        let result = context
-            .banks_client
-            .process_transaction_with_metadata(transaction)
-            .await
-            .map_err(RpcError::from)?;
-        result.result.map_err(RpcError::TransactionError)?;
+        let result = {
+            let mut context = self.context.write().await;
+            context
+                .banks_client
+                .process_transaction_with_metadata(transaction)
+                .await
+        };
+        result
+            .map_err(RpcError::from)?
+            .result
+            .map_err(RpcError::TransactionError)?;
         Ok(sig)
     }
 
@@ -76,15 +80,20 @@ impl RpcConnection for ProgramTestRpcConnection {
         &self,
         transaction: Transaction,
     ) -> Result<(Signature, Slot), RpcError> {
-        let mut context = self.context.write().await;
         let sig = *transaction.signatures.first().unwrap();
-        let result = context
-            .banks_client
-            .process_transaction_with_metadata(transaction)
-            .await
-            .map_err(RpcError::from)?;
-        result.result.map_err(RpcError::TransactionError)?;
-        let slot = context.banks_client.get_root_slot().await?;
+        let (result, slot) = {
+            let mut context = self.context.write().await;
+            let result = context
+                .banks_client
+                .process_transaction_with_metadata(transaction)
+                .await;
+            let slot = context.banks_client.get_root_slot().await?;
+            (result, slot)
+        };
+        result
+            .map_err(RpcError::from)?
+            .result
+            .map_err(RpcError::TransactionError)?;
         Ok((sig, slot))
     }
 
