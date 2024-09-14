@@ -234,10 +234,11 @@ impl RpcConnection for ProgramTestRpcConnection {
     }
 
     async fn airdrop_lamports(&self, to: &Pubkey, lamports: u64) -> Result<Signature, RpcError> {
-        let mut context = self.context.write().await;
         // Create a transfer instruction
-        let transfer_instruction =
-            system_instruction::transfer(&context.payer.pubkey(), to, lamports);
+        let transfer_instruction = {
+            let context = self.context.read().await;
+            system_instruction::transfer(&context.payer.pubkey(), to, lamports)
+        };
         let latest_blockhash = self.get_latest_blockhash().await?;
         // Create and sign a transaction
         let payer = self.get_payer().await;
@@ -250,10 +251,13 @@ impl RpcConnection for ProgramTestRpcConnection {
         let sig = *transaction.signatures.first().unwrap();
 
         // Send the transaction
-        context
-            .banks_client
-            .process_transaction(transaction)
-            .await?;
+        {
+            let mut context = self.context.write().await;
+            context
+                .banks_client
+                .process_transaction(transaction)
+                .await?;
+        }
 
         Ok(sig)
     }

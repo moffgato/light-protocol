@@ -278,12 +278,11 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
         Vec<CompressedAccountWithMerkleContext>,
         Vec<TokenDataWithContext>,
     ) {
-        let mut state = self.state.write().await;
-
         let mut to_nullify = Vec::new();
         let mut token_to_nullify = Vec::new();
 
         for hash in &event.input_compressed_account_hashes {
+            let mut state = self.state.read().await;
             if let Some(index) = state.compressed_accounts.iter().position(|x| {
                 x.compressed_account
                     .hash::<Poseidon>(
@@ -307,13 +306,14 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
                 token_to_nullify.push(state.token_compressed_accounts[index].clone());
             }
         }
-
         for account in to_nullify {
+            let mut state = self.state.write().await;
             state.compressed_accounts.retain(|x| x != &account);
             state.nullified_compressed_accounts.push(account);
         }
 
         for account in token_to_nullify {
+            let mut state = self.state.write().await;
             state.token_compressed_accounts.retain(|x| x != &account);
             state.token_nullified_compressed_accounts.push(account);
         }
@@ -322,6 +322,7 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
         let mut token_compressed_accounts = Vec::new();
 
         for (i, compressed_account) in event.output_compressed_accounts.iter().enumerate() {
+            let mut state = self.state.write().await;
             let nullifier_queue_pubkey = state
                 .state_merkle_trees
                 .iter()
@@ -420,7 +421,10 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
                 .expect("insert failed");
         }
 
-        state.events.push(event.clone());
+        {
+            let mut state = self.state.write().await;
+            state.events.push(event.clone());
+        }
         (compressed_accounts, token_compressed_accounts)
     }
 

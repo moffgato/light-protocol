@@ -63,7 +63,8 @@ pub async fn nullify_compressed_accounts<R: RpcConnection>(
         rpc.get_anchor_account::<ForesterEpochPda>(
             &get_forester_epoch_pda_from_authority(&forester.pubkey(), epoch).0,
         )
-        .await?
+        .await
+        .unwrap()
         .unwrap()
         .work_counter
     };
