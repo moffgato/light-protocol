@@ -54,8 +54,6 @@ async fn test_escrow_pda() {
     let mint = create_mint_helper(&rpc, &payer).await;
     let test_indexer = test_indexer.await;
 
-    println!("test_indexer initialized");
-
     let amount = 10000u64;
     mint_tokens_helper(
         &rpc,
@@ -69,7 +67,7 @@ async fn test_escrow_pda() {
     .await;
     let escrow_amount = 100u64;
     let lockup_time = 0u64;
-    println!("performing escrow");
+
     perform_escrow_with_event(
         &rpc,
         &test_indexer,
@@ -81,7 +79,6 @@ async fn test_escrow_pda() {
     .await
     .unwrap();
 
-    println!("asserting escrow");
     assert_escrow(
         &rpc,
         &test_indexer,
@@ -275,12 +272,9 @@ pub async fn perform_escrow_with_event<R: RpcConnection>(
     escrow_amount: &u64,
     lock_up_time: &u64,
 ) -> Result<(), RpcError> {
-    println!("performing escrow with event");
     let instruction =
         perform_escrow(rpc, test_indexer, env, payer, escrow_amount, lock_up_time).await;
-    println!("instruction created");
     let rent = rpc.get_minimum_balance_for_rent_exemption(16).await?;
-    println!("rent: {:?}", rent);
 
     let event = rpc
         .create_and_send_transaction_with_event::<PublicTransactionEvent>(
@@ -297,11 +291,9 @@ pub async fn perform_escrow_with_event<R: RpcConnection>(
         )
         .await?
         .unwrap();
-    println!("event created");
     test_indexer
         .add_compressed_accounts_with_token_data(&event.0)
         .await;
-    println!("added compressed accounts");
     Ok(())
 }
 
