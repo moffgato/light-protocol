@@ -38,9 +38,13 @@ impl BatchedMerkleTreeAccount {
     }
 }
 
+// Instead of a rollover we just push roots into root history. TODO: figure out
+// how we nullify in old trees. (it's probably easier to just stick to the
+// current model.)
 pub struct ZeroCopyBatchedMerkleTreeAccount<'a> {
     pub account: &'a mut BatchedMerkleTreeAccount,
-    pub root_history: ManuallyDrop<CyclicBoundedVec<[u8; 32]>>,
+    pub root_buffer: ManuallyDrop<CyclicBoundedVec<[u8; 32]>>,
+    // pub root_history: ManuallyDrop<CyclicBoundedVec<[u8; 32]>>,
 }
 
 /// Get batch from account.
@@ -84,10 +88,10 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
             return err!(AccountCompressionErrorCode::SizeMismatch);
         }
         let mut start_offset = std::mem::size_of::<BatchedMerkleTreeAccount>();
-        let root_history = deserialize_cyclic_bounded_vec(account_data, &mut start_offset);
+        let root_buffer = deserialize_cyclic_bounded_vec(account_data, &mut start_offset);
         Ok(ZeroCopyBatchedMerkleTreeAccount {
             account,
-            root_history,
+            root_buffer,
         })
     }
 
@@ -100,10 +104,10 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
             return err!(AccountCompressionErrorCode::SizeMismatch);
         }
         let mut start_offset = std::mem::size_of::<BatchedMerkleTreeAccount>();
-        let root_history = deserialize_cyclic_bounded_vec(account_data, &mut start_offset);
+        let root_buffer = deserialize_cyclic_bounded_vec(account_data, &mut start_offset);
         Ok(ZeroCopyBatchedMerkleTreeAccount {
             account,
-            root_history,
+            root_buffer,
         })
     }
 
@@ -124,7 +128,7 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
             hash_chains.push(batch.hash_chain)
         }
         let public_inputs = BatchProofInputs {
-            old_root: *self.root_history.first().unwrap(),
+            old_root: *self.root_buffer.first().unwrap(),
             new_root: instruction_data.public_inputs.new_root,
             start_index: self.account.next_index,
             end_index: self.account.next_index
@@ -175,7 +179,7 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
         let public_input_hash = self.compress_public_inputs(&public_inputs)?;
         // TODO: replace with actual verification in light-verifier
         verify_mock_circuit(&public_input_hash, &instruction_data.compressed_proof)?;
-        self.root_history.push(public_inputs.new_root);
+        self.root_buffer.push(public_inputs.new_root);
         self.account.next_index = public_inputs.end_index;
 
         Ok(())
