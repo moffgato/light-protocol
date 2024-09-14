@@ -112,15 +112,21 @@ impl RpcConnection for ProgramTestRpcConnection {
             signers,
             context.get_new_latest_blockhash().await?,
         );
+        drop(context);
 
         let signature = transaction.signatures[0];
         // Simulate the transaction. Currently, in banks-client/server, only
         // simulations are able to track CPIs. Therefore, simulating is the
         // only way to retrieve the event.
-        let simulation_result = context
-            .banks_client
-            .simulate_transaction(transaction.clone())
-            .await?;
+
+        let simulation_result = {
+            let mut context = self.context.write().await;
+            context
+                .banks_client
+                .simulate_transaction(transaction.clone())
+                .await?
+        };
+
         // Handle an error nested in the simulation result.
         if let Some(Err(e)) = simulation_result.result {
             let error = match e {
@@ -141,7 +147,11 @@ impl RpcConnection for ProgramTestRpcConnection {
             });
         // If transaction was successful, execute it.
         if let Some(Ok(())) = simulation_result.result {
-            let result = context.banks_client.process_transaction(transaction).await;
+            let result = {
+                let mut context = self.context.write().await;
+                context.banks_client.process_transaction(transaction).await
+            };
+
             if let Err(e) = result {
                 let error = RpcError::from(e);
                 return Err(error);
@@ -196,7 +206,10 @@ impl RpcConnection for ProgramTestRpcConnection {
             }
         }
 
-        let slot = context.banks_client.get_root_slot().await?;
+        let slot = {
+            let mut context = self.context.write().await;
+            context.banks_client.get_root_slot().await?
+        };
         let result = event.map(|event| (event, signature, slot));
         Ok(result)
     }
