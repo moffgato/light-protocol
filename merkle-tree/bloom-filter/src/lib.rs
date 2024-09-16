@@ -82,6 +82,7 @@ impl<'a> BloomFilter<'a> {
         }
     }
 
+    // TODO: reconsider &mut self
     pub fn contains(&mut self, value: &[u8; 32]) -> bool {
         !self._insert(value, false)
     }

@@ -18,6 +18,7 @@ pub struct Batch {
     /// is used to save intermediate state.
     pub prover_hash_chain: [u8; 32],
     pub sequence_number: u64,
+    pub is_inserted: bool,
 }
 
 impl Batch {
@@ -25,14 +26,17 @@ impl Batch {
     pub fn is_ready_to_update_tree(&self) -> bool {
         println!("Num inserted: {:?}", self.num_inserted);
         println!("Value capacity: {:?}", self.value_capacity);
-        self.num_inserted == self.value_capacity
+        println!("Is inserted: {:?}", self.is_inserted);
+        self.num_inserted == self.value_capacity && !self.is_inserted
     }
 
     /// It is possible to add values to the batch:
     /// 1. If the batch is not ready to update the tree.
     /// 2. If the sequence number is greater than the current sequence number.
     pub fn can_be_filled(&self, sequence_number: u64) -> bool {
-        !self.is_ready_to_update_tree() && sequence_number >= self.sequence_number
+        !self.is_ready_to_update_tree()
+            && sequence_number >= self.sequence_number
+            && !self.is_inserted
     }
 
     /// Inserts values into the bloom filter, stores value in values array and hashes the value.
@@ -98,6 +102,9 @@ impl Batch {
             Poseidon::hashv(&[self.user_hash_chain.as_slice(), value.as_slice()])
                 .map_err(ProgramError::from)?;
         self.num_inserted += 1;
+        if self.num_inserted == self.value_capacity {
+            self.is_inserted = false;
+        }
         Ok(())
     }
 
@@ -140,6 +147,7 @@ mod tests {
             prover_hash_chain: [0u8; 32],
             sequence_number: 0,
             value_capacity: 500,
+            is_inserted: true,
         }
     }
 
@@ -184,6 +192,9 @@ mod tests {
             assert!(bloomfilter.contains(&value));
             ref_batch.num_inserted += 1;
             ref_batch.user_hash_chain = ref_hash_chain;
+            if i == batch.value_capacity - 1 {
+                ref_batch.is_inserted = false;
+            }
             assert_eq!(batch, ref_batch);
             assert_eq!(*value_store.get(i as usize).unwrap(), value);
         }
@@ -248,6 +259,9 @@ mod tests {
             assert!(bloomfilter.contains(&value));
             ref_batch.num_inserted += 1;
             ref_batch.user_hash_chain = ref_hash_chain;
+            if i == batch.value_capacity - 1 {
+                ref_batch.is_inserted = false;
+            }
             assert_eq!(batch, ref_batch);
         }
     }
@@ -263,6 +277,7 @@ mod tests {
         let user_hash_chain = Poseidon::hashv(&[&[0u8; 32], &value]).unwrap();
         ref_batch.user_hash_chain = user_hash_chain;
         ref_batch.num_inserted = 1;
+        ref_batch.is_inserted = false;
         assert_eq!(batch, ref_batch);
     }
 

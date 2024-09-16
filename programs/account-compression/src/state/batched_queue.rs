@@ -33,6 +33,8 @@ pub struct BatchedAddressQueueAccount {
     pub next_index: u64,
     pub currently_processing_batch_index: u64,
     pub next_full_batch_index: u64,
+    /// Index of last batch used to update in the Merkle tree.
+    pub last_mt_updated_batch: u64,
     pub bloom_filter_capacity: u64,
 }
 
@@ -97,7 +99,6 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
         // Try to insert into the current queue.
         // In case the current queue fails, try to insert into the next queue.
         // Check every queue.
-
         for index in self.account.currently_processing_batch_index
             ..(len as u64 + self.account.currently_processing_batch_index)
         {
@@ -188,7 +189,6 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
             &mut start_offset,
             false,
         );
-        println!("num_batches: {:?}", account.num_batches);
         for i in 0..account.num_batches {
             batches
                 .push(Batch {
@@ -200,6 +200,7 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
                     sequence_number: 0,
                     num_inserted: 0,
                     value_capacity: account.batch_size,
+                    is_inserted: false,
                 })
                 .map_err(ProgramError::from)?;
         }
@@ -298,7 +299,7 @@ pub fn init_bounded_vec<T: Clone>(
     } else {
         BoundedVecMetadata::new(capacity)
     };
-    write_at::<BoundedVecMetadata>(account_data, meta.to_ne_bytes().as_slice(), start_offset);
+    write_at::<BoundedVecMetadata>(account_data, meta.to_le_bytes().as_slice(), start_offset);
     let meta: *mut BoundedVecMetadata = unsafe {
         read_ptr_at(
             &*account_data,
@@ -339,7 +340,7 @@ pub fn init_bounded_cyclic_vec<T: Clone>(
     } else {
         CyclicBoundedVecMetadata::new(capacity)
     };
-    write_at::<CyclicBoundedVecMetadata>(account_data, meta.to_ne_bytes().as_slice(), start_offset);
+    write_at::<CyclicBoundedVecMetadata>(account_data, meta.to_le_bytes().as_slice(), start_offset);
     let meta: *mut CyclicBoundedVecMetadata = unsafe {
         read_ptr_at(
             &*account_data,
@@ -383,6 +384,7 @@ pub mod tests {
             next_index: 0,
             sequence_number: 0,
             next_full_batch_index: 0,
+            last_mt_updated_batch: 0,
             bloom_filter_capacity,
         };
         let account_data: Vec<u8> = vec![0; account.size().unwrap()];
