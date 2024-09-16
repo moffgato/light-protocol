@@ -1,7 +1,6 @@
 use crate::{
     batched_queue::{deserialize_cyclic_bounded_vec, ZeroCopyBatchedAddressQueueAccount},
     errors::AccountCompressionErrorCode,
-    MerkleTreeMetadata,
 };
 use aligned_sized::aligned_sized;
 use anchor_lang::prelude::*;
@@ -10,15 +9,36 @@ use light_hasher::{Hasher, Poseidon};
 use light_verifier::CompressedProof;
 use std::mem::ManuallyDrop;
 
+use super::{
+    batched_queue::{init_bounded_cyclic_vec, BatchedAddressQueueAccount},
+    AccessMetadata, RolloverMetadata,
+};
+
+#[derive(Debug, PartialEq)]
+#[account(zero_copy)]
+pub struct BatchedMerkleTreeMetadata {
+    pub access_metadata: AccessMetadata,
+    pub rollover_metadata: RolloverMetadata,
+    // Queue associated with this Merkle tree.
+    pub associated_input_queue: Pubkey,
+    pub associated_output_queue: Pubkey,
+    // Next Merkle tree to be used after rollover.
+    pub next_merkle_tree: Pubkey,
+    pub tree_type: u64,
+}
+
+#[repr(u64)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TreeType {
     State = 1,
     Address = 2,
 }
 
+#[derive(Debug, PartialEq)]
 #[account(zero_copy)]
 #[aligned_sized(anchor)]
 pub struct BatchedMerkleTreeAccount {
-    pub metadata: MerkleTreeMetadata,
+    pub metadata: BatchedMerkleTreeMetadata,
     pub sequence_number: u64,
     pub tree_type: u64,
     pub next_index: u64,
@@ -59,9 +79,23 @@ pub struct InstructionDataBatchUpdateProofInputs {
     pub compressed_proof: CompressedProof,
 }
 
+pub enum Circuit {
+    Batch100,
+}
+
 pub struct BatchProofInputsIx {
-    pub num_batches_in_proof: u16,
+    pub circuit_id: u16,
     pub new_root: [u8; 32],
+    pub output_hash_chain: [u8; 32],
+}
+
+impl BatchProofInputsIx {
+    pub fn map_circuit_id(&self) -> u16 {
+        match self.circuit_id {
+            1 => 10,
+            _ => panic!("Invalid circuit id"),
+        }
+    }
 }
 
 pub struct BatchProofInputs {
@@ -69,7 +103,9 @@ pub struct BatchProofInputs {
     pub new_root: [u8; 32],
     pub start_index: u64,
     pub end_index: u64,
-    pub hash_chains: Vec<[u8; 32]>,
+    pub user_hash_chain: [u8; 32],
+    pub input_hash_chain: [u8; 32],
+    pub output_hash_chain: [u8; 32],
 }
 
 impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
@@ -104,7 +140,13 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
             return err!(AccountCompressionErrorCode::SizeMismatch);
         }
         let mut start_offset = std::mem::size_of::<BatchedMerkleTreeAccount>();
-        let root_buffer = deserialize_cyclic_bounded_vec(account_data, &mut start_offset);
+        // let root_buffer = deserialize_cyclic_bounded_vec(account_data, &mut start_offset);
+        let root_buffer: ManuallyDrop<CyclicBoundedVec<[u8; 32]>> = init_bounded_cyclic_vec(
+            account.root_history_capacity as usize,
+            account_data,
+            &mut start_offset,
+            true,
+        );
         Ok(ZeroCopyBatchedMerkleTreeAccount {
             account,
             root_buffer,
@@ -116,25 +158,26 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
         queue_account: &mut ZeroCopyBatchedAddressQueueAccount,
         instruction_data: &InstructionDataBatchUpdateProofInputs,
     ) -> Result<BatchProofInputs> {
-        let mut hash_chains = Vec::new();
         let batch_capacity = queue_account.account.batch_size as usize;
-        for _ in 0..instruction_data.public_inputs.num_batches_in_proof {
-            let batch = queue_account.get_next_full_batch()?;
-            if !batch.is_ready_to_update_tree() {
-                return err!(AccountCompressionErrorCode::BatchNotReady);
-            }
-            let sequence_threshold = self.account.root_history_capacity;
-            batch.mark_with_sequence_number(self.account.sequence_number, sequence_threshold);
-            hash_chains.push(batch.hash_chain)
+        // for _ in 0..instruction_data.public_inputs.num_batches_in_proof {
+        let batch = queue_account.get_next_full_batch()?;
+        if !batch.is_ready_to_update_tree() {
+            return err!(AccountCompressionErrorCode::BatchNotReady);
         }
+        let sequence_threshold = self.account.root_history_capacity;
+        batch.mark_with_sequence_number(self.account.sequence_number, sequence_threshold);
+        // hash_chains.push(batch.hash_chain);
+        // }
+
         let public_inputs = BatchProofInputs {
             old_root: *self.root_buffer.first().unwrap(),
             new_root: instruction_data.public_inputs.new_root,
             start_index: self.account.next_index,
-            end_index: self.account.next_index
-                + batch_capacity as u64
-                    * instruction_data.public_inputs.num_batches_in_proof as u64,
-            hash_chains,
+            end_index: self.account.next_index + batch_capacity as u64,
+            // * instruction_data.public_inputs.map_circuit_id() as u64,
+            user_hash_chain: batch.user_hash_chain,
+            input_hash_chain: batch.prover_hash_chain,
+            output_hash_chain: batch.prover_hash_chain,
         };
         Ok(public_inputs)
     }
@@ -151,12 +194,12 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
         ])
         .map_err(ProgramError::from)?;
 
-        let mut current_hash_chain_hash = public_inputs.hash_chains[0];
-        // If only one batch no need to hash
-        for hash_chain in public_inputs.hash_chains.iter().skip(1) {
-            current_hash_chain_hash = Poseidon::hashv(&[&current_hash_chain_hash, hash_chain])
-                .map_err(ProgramError::from)?;
-        }
+        let current_hash_chain_hash = Poseidon::hashv(&[
+            &public_inputs.user_hash_chain,
+            &public_inputs.input_hash_chain,
+            &public_inputs.output_hash_chain,
+        ])
+        .map_err(ProgramError::from)?;
         // Poseidon hashes are cheaper than public inputs.
         let public_input_hash = Poseidon::hashv(&[&meta_poseidon_hash, &current_hash_chain_hash])
             .map_err(ProgramError::from)?;
@@ -164,17 +207,23 @@ impl<'a> ZeroCopyBatchedMerkleTreeAccount<'a> {
         Ok(public_input_hash)
     }
 
+    // TODO: add flexibility for using multiple proofs to consume one queue batch.
     pub fn update(
         &mut self,
-        queue_account: &mut ZeroCopyBatchedAddressQueueAccount,
+        queue_account: &mut BatchedAddressQueueAccount,
+        queue_account_data: &mut [u8],
         instruction_data: InstructionDataBatchUpdateProofInputs,
     ) -> Result<()> {
+        let mut queue_account =
+            ZeroCopyBatchedAddressQueueAccount::from_account(queue_account, queue_account_data)
+                .unwrap();
+        println!("queue_account: {:?}", queue_account);
         // Increment sequence number here because we mark the batch with
         // sequence number already in get_public_inputs_from_queue_account.
         self.account.sequence_number += 1;
 
         let public_inputs =
-            self.get_public_inputs_from_queue_account(queue_account, &instruction_data)?;
+            self.get_public_inputs_from_queue_account(&mut queue_account, &instruction_data)?;
 
         let public_input_hash = self.compress_public_inputs(&public_inputs)?;
         // TODO: replace with actual verification in light-verifier
@@ -197,138 +246,212 @@ pub fn verify_mock_circuit(_public_input_hash: &[u8; 32], _proof: &CompressedPro
 mod tests {
 
     use crate::{
-        batched_queue::{BatchedAddressQueueAccount, ZeroCopyBatchedAddressQueueAccount},
-        AccessMetadata, QueueMetadata, QueueType, RolloverMetadata,
+        batched_queue::tests::get_test_account_and_account_data, AccessMetadata, QueueType,
+        RolloverMetadata,
     };
 
     use super::*;
 
-    pub fn get_test_account_and_account_data(
-        batch_size: u64,
-        num_batches: u64,
-        queue_type: QueueType,
-    ) -> (BatchedAddressQueueAccount, Vec<u8>) {
-        let metadata = QueueMetadata {
-            next_queue: Pubkey::new_unique(),
+    pub fn get_test_mt_account_and_account_data(
+        tree_type: TreeType,
+        height: u64,
+        root_history_capacity: u64,
+    ) -> (BatchedMerkleTreeAccount, Vec<u8>) {
+        let metadata = BatchedMerkleTreeMetadata {
+            next_merkle_tree: Pubkey::new_unique(),
             access_metadata: AccessMetadata::default(),
             rollover_metadata: RolloverMetadata::default(),
-            queue_type: queue_type as u64,
-            associated_merkle_tree: Pubkey::new_unique(),
+            tree_type: tree_type as u64,
+            associated_input_queue: Pubkey::new_unique(),
+            associated_output_queue: Pubkey::new_unique(),
         };
 
-        let account = BatchedAddressQueueAccount {
+        let account = BatchedMerkleTreeAccount {
             metadata: metadata.clone(),
-            batch_size: batch_size as u64,
-            num_batches: num_batches as u64,
-            currently_processing_batch_index: 0,
             next_index: 0,
             sequence_number: 0,
-            next_full_batch_index: 0,
-            bloom_filter_capacity: 20_000,
+            tree_type: tree_type as u64,
+            height,
+            root_history_capacity,
+            current_root_index: 0,
         };
         let account_data: Vec<u8> = vec![0; account.size().unwrap()];
         (account, account_data)
     }
 
-    fn assert_queue_zero_copy_inited(
-        batch_size: usize,
-        num_batches: usize,
-        zero_copy_account: &ZeroCopyBatchedAddressQueueAccount,
-        account: &BatchedAddressQueueAccount,
+    fn assert_mt_zero_copy_inited(
+        tree_type: TreeType,
+        height: u64,
+        root_history_capacity: u64,
+        zero_copy_account: &ZeroCopyBatchedMerkleTreeAccount,
+        account: &BatchedMerkleTreeAccount,
     ) {
-        assert_eq!(zero_copy_account.account, account, "metadata mismatch");
+        assert_eq!(*zero_copy_account.account, *account, "metadata mismatch");
         assert_eq!(
-            zero_copy_account.batches.len(),
-            num_batches,
-            "batches mismatch"
+            zero_copy_account.root_buffer.capacity(),
+            root_history_capacity as usize,
+            "root_history_capacity mismatch"
         );
-        if account.metadata.queue_type == QueueType::Input as u64 {
-            assert_eq!(zero_copy_account.value_vecs.len(), 0, "value_vecs mismatch");
-            assert_eq!(
-                zero_copy_account.value_vecs.capacity(),
-                0,
-                "value_vecs mismatch"
-            );
-        } else {
-            assert_eq!(
-                zero_copy_account.value_vecs.capacity(),
-                num_batches,
-                "value_vecs mismatch"
-            );
-            assert_eq!(
-                zero_copy_account.value_vecs.len(),
-                num_batches,
-                "value_vecs mismatch"
-            );
-        }
-        if account.metadata.queue_type == QueueType::Output as u64 {
-            assert_eq!(
-                zero_copy_account.bloomfilter_stores.capacity(),
-                0,
-                "bloomfilter_stores mismatch"
-            );
-        } else {
-            assert_eq!(
-                zero_copy_account.bloomfilter_stores.capacity(),
-                num_batches,
-                "bloomfilter_stores mismatch"
-            );
-            assert_eq!(
-                zero_copy_account.bloomfilter_stores.len(),
-                num_batches,
-                "bloomfilter_stores mismatch"
-            );
-        }
+        assert_eq!(zero_copy_account.account.height, height, "height mismatch");
+        assert_eq!(
+            zero_copy_account.account.tree_type, tree_type as u64,
+            "tree_type mismatch"
+        );
+        assert_eq!(zero_copy_account.account.next_index, 0, "next_index != 0");
+        assert_eq!(
+            zero_copy_account.account.sequence_number, 0,
+            "sequence_number != 0"
+        );
+        assert_eq!(
+            zero_copy_account.account.current_root_index, 0,
+            "current_root_index != 0"
+        );
 
-        for vec in zero_copy_account.bloomfilter_stores.iter() {
-            assert_eq!(
-                vec.capacity(),
-                account.bloom_filter_capacity as usize,
-                "bloom_filter_capacity mismatch"
-            );
-            assert_eq!(
-                vec.len(),
-                account.bloom_filter_capacity as usize,
-                "bloom_filter_capacity mismatch"
-            );
-        }
+        // if account.metadata.tree_type == TreeType::State as u64 {
+        //     assert_eq!(zero_copy_account.value_vecs.len(), 0, "value_vecs mismatch");
+        //     assert_eq!(
+        //         zero_copy_account.value_vecs.capacity(),
+        //         0,
+        //         "value_vecs mismatch"
+        //     );
+        // }
+        // else {
+        //     assert_eq!(
+        //         zero_copy_account.value_vecs.capacity(),
+        //         num_batches,
+        //         "value_vecs mismatch"
+        //     );
+        //     assert_eq!(
+        //         zero_copy_account.value_vecs.len(),
+        //         num_batches,
+        //         "value_vecs mismatch"
+        //     );
+        // }
+        // if account.metadata.queue_type == QueueType::Output as u64 {
+        //     assert_eq!(
+        //         zero_copy_account.bloomfilter_stores.capacity(),
+        //         0,
+        //         "bloomfilter_stores mismatch"
+        //     );
+        // } else {
+        //     assert_eq!(
+        //         zero_copy_account.bloomfilter_stores.capacity(),
+        //         num_batches,
+        //         "bloomfilter_stores mismatch"
+        //     );
+        //     assert_eq!(
+        //         zero_copy_account.bloomfilter_stores.len(),
+        //         num_batches,o
+        //         "bloomfilter_stores mismatch"
+        //     );
+        // }
 
-        for vec in zero_copy_account.value_vecs.iter() {
-            assert_eq!(vec.capacity(), batch_size, "batch_size mismatch");
-            assert_eq!(vec.len(), 0, "batch_size mismatch");
-        }
+        // for vec in zero_copy_account.bloomfilter_stores.iter() {
+        //     assert_eq!(
+        //         vec.capacity(),
+        //         account.bloom_filter_capacity as usize,
+        //         "bloom_filter_capacity mismatch"
+        //     );
+        //     assert_eq!(
+        //         vec.len(),
+        //         account.bloom_filter_capacity as usize,
+        //         "bloom_filter_capacity mismatch"
+        //     );
+        // }
+
+        // for vec in zero_copy_account.value_vecs.iter() {
+        //     assert_eq!(vec.capacity(), batch_size, "batch_size mismatch");
+        //     assert_eq!(vec.len(), 0, "batch_size mismatch");
+        // }
     }
 
     #[test]
-    fn test_unpack_output_queue_account() {
-        let batch_size = 2;
+    fn test_unpack_mt_account() {
+        let batch_size = 100;
         let num_batches = 2;
+        let queue_type = QueueType::Input;
+        let height = 26;
+        // Should be equal to num batches
+        let root_history_capacity = 2;
         let bloomfilter_capacity = 20_000 * 8;
         let bloomfilter_num_iters = 3;
-        for queue_type in vec![QueueType::Input, QueueType::Output, QueueType::Address] {
+        let (mut queue_account, mut queue_account_data) = get_test_account_and_account_data(
+            batch_size,
+            num_batches,
+            queue_type,
+            bloomfilter_capacity,
+        );
+        let pre_init_account_data = queue_account_data.clone();
+        // Init
+        {
+            ZeroCopyBatchedAddressQueueAccount::init_from_account(
+                &mut queue_account,
+                &mut queue_account_data,
+                bloomfilter_num_iters,
+            )
+            .unwrap();
+        }
+        assert_ne!(queue_account_data, pre_init_account_data);
+
+        // Fill queue with values
+        for i in 0..batch_size {
+            let mut zero_copy_account = ZeroCopyBatchedAddressQueueAccount::from_account(
+                &mut queue_account,
+                &mut queue_account_data,
+            )
+            .unwrap();
+            let mut value = [0u8; 32];
+            value[24..].copy_from_slice(&i.to_le_bytes());
+            zero_copy_account.insert_into_current_batch(&value).unwrap();
+        }
+
+        // assert values are in bloom filter and value vec
+        {
+            // batch ready
+            // value exists in bloom filter
+            // value exists in value array
+            //
+        }
+
+        for tree_type in vec![TreeType::State] {
             let (mut account, mut account_data) =
-                get_test_account_and_account_data(batch_size, num_batches, queue_type);
+                get_test_mt_account_and_account_data(tree_type, height, root_history_capacity);
             let ref_account = account.clone();
-            let mut zero_copy_account = ZeroCopyBatchedAddressQueueAccount::init_from_account(
+            let mut zero_copy_account = ZeroCopyBatchedMerkleTreeAccount::init_from_account(
                 &mut account,
                 &mut account_data,
-                bloomfilter_num_iters,
-                bloomfilter_capacity,
+                root_history_capacity as usize,
             )
             .unwrap();
 
-            assert_queue_zero_copy_inited(
-                batch_size as usize,
-                num_batches as usize,
+            assert_mt_zero_copy_inited(
+                tree_type,
+                height,
+                root_history_capacity,
                 &zero_copy_account,
                 &ref_account,
             );
-            let value = [1u8; 32];
-            println!("queue_type: {:?}", queue_type);
-            assert!(zero_copy_account.insert_into_current_batch(&value).is_ok());
-            if queue_type != QueueType::Output {
-                assert!(zero_copy_account.insert_into_current_batch(&value).is_err());
-            }
+            let instruction_data = InstructionDataBatchUpdateProofInputs {
+                public_inputs: BatchProofInputsIx {
+                    circuit_id: 1,
+                    new_root: [1u8; 32],
+                    output_hash_chain: [1u8; 32],
+                },
+                compressed_proof: CompressedProof::default(),
+            };
+            zero_copy_account
+                .update(
+                    &mut queue_account,
+                    &mut queue_account_data,
+                    instruction_data,
+                )
+                .unwrap();
+            // let value = [1u8; 32];
+            // println!("queue_type: {:?}", tree_type);
+            // assert!(zero_copy_account.insert_into_current_batch(&value).is_ok());
+            // if queue_type != QueueType::Output {
+            //     assert!(zero_copy_account.insert_into_current_batch(&value).is_err());
+            // }
             // TODO: add full assert
         }
     }

@@ -1,7 +1,9 @@
 use crate::{batch::Batch, errors::AccountCompressionErrorCode, QueueMetadata, QueueType};
 use aligned_sized::aligned_sized;
 use anchor_lang::prelude::*;
-use light_bounded_vec::{BoundedVec, BoundedVecMetadata, CyclicBoundedVec};
+use light_bounded_vec::{
+    BoundedVec, BoundedVecMetadata, CyclicBoundedVec, CyclicBoundedVecMetadata,
+};
 use light_utils::offset::zero_copy::write_at;
 use light_utils::offset::zero_copy::{read_array_like_ptr_at, read_ptr_at};
 use std::mem::ManuallyDrop;
@@ -104,7 +106,7 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
             let value_store = self.value_vecs.get_mut(index);
             let current_batch = self.batches.get_mut(index).unwrap();
             let queue_type = QueueType::from(self.account.metadata.queue_type);
-            let is_full = current_batch.capacity == current_batch.num_inserted;
+            let is_full = self.account.batch_size == current_batch.num_inserted;
 
             let can_be_filled = current_batch.can_be_filled(self.account.sequence_number);
 
@@ -137,7 +139,6 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
                     if QueueType::Output == queue_type {
                         return Ok(());
                     }
-                    current_batch.num_inserted += 1;
                     inserted = true;
                 }
                 Err(error) => {
@@ -148,6 +149,7 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
         Ok(())
     }
 
+    // TODO: add discriminator check
     // TODO: add from_account_info,  and from_account_loader
     pub fn from_account(
         account: &'a mut BatchedAddressQueueAccount,
@@ -173,7 +175,6 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
         account: &'a mut BatchedAddressQueueAccount,
         account_data: &mut [u8],
         num_iters: u64,
-        capacity: u64,
     ) -> Result<ZeroCopyBatchedAddressQueueAccount<'a>> {
         if account_data.len() != account.size()? {
             return err!(AccountCompressionErrorCode::SizeMismatch);
@@ -187,13 +188,15 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
             &mut start_offset,
             false,
         );
+        println!("num_batches: {:?}", account.num_batches);
         for i in 0..account.num_batches {
             batches
                 .push(Batch {
                     id: i as u8,
                     num_iters,
-                    capacity,
-                    hash_chain: [0; 32],
+                    bloomfilter_capacity: account.bloom_filter_capacity,
+                    user_hash_chain: [0; 32],
+                    prover_hash_chain: [0; 32],
                     sequence_number: 0,
                     num_inserted: 0,
                     value_capacity: account.batch_size,
@@ -212,7 +215,7 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
 
         let bloomfilter_stores = init_bounded_vecs(
             num_stores,
-            account.bloom_filter_capacity as usize,
+            account.bloom_filter_capacity as usize / 8,
             account_data,
             &mut start_offset,
             true,
@@ -227,6 +230,11 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
     }
 
     pub fn get_next_full_batch(&mut self) -> Result<&mut Batch> {
+        println!(
+            "next_full_batch_index: {:?}",
+            self.account.next_full_batch_index
+        );
+        println!("batches.len(): {:?}", self.batches.len());
         let batch = self
             .batches
             .get_mut(self.account.next_full_batch_index as usize)
@@ -320,8 +328,34 @@ pub fn init_bounded_vecs<T: Clone>(
     value_vecs
 }
 
+pub fn init_bounded_cyclic_vec<T: Clone>(
+    capacity: usize,
+    account_data: &mut [u8],
+    start_offset: &mut usize,
+    with_len: bool,
+) -> ManuallyDrop<CyclicBoundedVec<T>> {
+    let meta: CyclicBoundedVecMetadata = if with_len {
+        CyclicBoundedVecMetadata::new_with_length(capacity, capacity)
+    } else {
+        CyclicBoundedVecMetadata::new(capacity)
+    };
+    write_at::<CyclicBoundedVecMetadata>(account_data, meta.to_ne_bytes().as_slice(), start_offset);
+    let meta: *mut CyclicBoundedVecMetadata = unsafe {
+        read_ptr_at(
+            &*account_data,
+            &mut start_offset.sub(std::mem::size_of::<CyclicBoundedVecMetadata>()),
+        )
+    };
+    unsafe {
+        ManuallyDrop::new(CyclicBoundedVec::from_raw_parts(
+            meta,
+            read_array_like_ptr_at(&*account_data, start_offset, capacity),
+        ))
+    }
+}
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use crate::{AccessMetadata, RolloverMetadata};
 
@@ -331,6 +365,7 @@ mod tests {
         batch_size: u64,
         num_batches: u64,
         queue_type: QueueType,
+        bloom_filter_capacity: u64,
     ) -> (BatchedAddressQueueAccount, Vec<u8>) {
         let metadata = QueueMetadata {
             next_queue: Pubkey::new_unique(),
@@ -348,7 +383,7 @@ mod tests {
             next_index: 0,
             sequence_number: 0,
             next_full_batch_index: 0,
-            bloom_filter_capacity: 20_000,
+            bloom_filter_capacity,
         };
         let account_data: Vec<u8> = vec![0; account.size().unwrap()];
         (account, account_data)
@@ -406,12 +441,12 @@ mod tests {
 
         for vec in zero_copy_account.bloomfilter_stores.iter() {
             assert_eq!(
-                vec.capacity(),
+                vec.capacity() * 8,
                 account.bloom_filter_capacity as usize,
                 "bloom_filter_capacity mismatch"
             );
             assert_eq!(
-                vec.len(),
+                vec.len() * 8,
                 account.bloom_filter_capacity as usize,
                 "bloom_filter_capacity mismatch"
             );
@@ -425,19 +460,23 @@ mod tests {
 
     #[test]
     fn test_unpack_output_queue_account() {
-        let batch_size = 2;
+        let batch_size = 100;
+        // 1 batch in progress, 1 batch ready to be processed
         let num_batches = 2;
         let bloomfilter_capacity = 20_000 * 8;
         let bloomfilter_num_iters = 3;
         for queue_type in vec![QueueType::Input, QueueType::Output, QueueType::Address] {
-            let (mut account, mut account_data) =
-                get_test_account_and_account_data(batch_size, num_batches, queue_type);
+            let (mut account, mut account_data) = get_test_account_and_account_data(
+                batch_size,
+                num_batches,
+                queue_type,
+                bloomfilter_capacity,
+            );
             let ref_account = account.clone();
-            let mut zero_copy_account = ZeroCopyBatchedAddressQueueAccount::init_from_account(
+            let zero_copy_account = ZeroCopyBatchedAddressQueueAccount::init_from_account(
                 &mut account,
                 &mut account_data,
                 bloomfilter_num_iters,
-                bloomfilter_capacity,
             )
             .unwrap();
 
@@ -447,9 +486,20 @@ mod tests {
                 &zero_copy_account,
                 &ref_account,
             );
+            let mut zero_copy_account =
+                ZeroCopyBatchedAddressQueueAccount::from_account(&mut account, &mut account_data)
+                    .unwrap();
+            assert_queue_zero_copy_inited(
+                batch_size as usize,
+                num_batches as usize,
+                &zero_copy_account,
+                &ref_account,
+            );
+            println!("zero_copy_account: {:?}", zero_copy_account);
             let value = [1u8; 32];
             println!("queue_type: {:?}", queue_type);
-            assert!(zero_copy_account.insert_into_current_batch(&value).is_ok());
+            zero_copy_account.insert_into_current_batch(&value).unwrap();
+            // assert!(zero_copy_account.insert_into_current_batch(&value).is_ok());
             if queue_type != QueueType::Output {
                 assert!(zero_copy_account.insert_into_current_batch(&value).is_err());
             }

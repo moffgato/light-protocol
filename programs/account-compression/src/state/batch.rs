@@ -9,16 +9,22 @@ use crate::errors::AccountCompressionErrorCode;
 pub struct Batch {
     pub id: u8,
     pub num_iters: u64,
-    pub capacity: u64,
+    pub bloomfilter_capacity: u64,
     pub value_capacity: u64,
+    // TODO: make private
     pub num_inserted: u64,
-    pub hash_chain: [u8; 32],
+    pub user_hash_chain: [u8; 32],
+    /// To enable update of the batch in multiple proofs the prover hash chain
+    /// is used to save intermediate state.
+    pub prover_hash_chain: [u8; 32],
     pub sequence_number: u64,
 }
 
 impl Batch {
     /// Batch has been marked as ready to update the tree.
     pub fn is_ready_to_update_tree(&self) -> bool {
+        println!("Num inserted: {:?}", self.num_inserted);
+        println!("Value capacity: {:?}", self.value_capacity);
         self.num_inserted == self.value_capacity
     }
 
@@ -73,8 +79,12 @@ impl Batch {
     /// Inserts into the bloom filter and hashes the value.
     /// (used by input/nullifier queue)
     pub fn insert(&mut self, value: &[u8; 32], store: &mut [u8]) -> Result<()> {
-        let mut bloom_filter = BloomFilter::new(self.num_iters as usize, self.capacity, store)
-            .map_err(ProgramError::from)?;
+        println!("Inserting value: {:?}", value);
+        println!("Num iters: {:?}", self.num_iters);
+        println!("Capacity: {:?}", self.bloomfilter_capacity);
+        let mut bloom_filter =
+            BloomFilter::new(self.num_iters as usize, self.bloomfilter_capacity, store)
+                .map_err(ProgramError::from)?;
         bloom_filter.insert(value).map_err(ProgramError::from)?;
         self.add_to_hash_chain(value)?;
 
@@ -84,17 +94,23 @@ impl Batch {
     /// Adds a value to the hash chain so that it can be used in the batch
     /// update zkp.
     pub fn add_to_hash_chain(&mut self, value: &[u8; 32]) -> Result<()> {
-        self.hash_chain = Poseidon::hashv(&[self.hash_chain.as_slice(), value.as_slice()])
-            .map_err(ProgramError::from)?;
+        self.user_hash_chain =
+            Poseidon::hashv(&[self.user_hash_chain.as_slice(), value.as_slice()])
+                .map_err(ProgramError::from)?;
         self.num_inserted += 1;
         Ok(())
+    }
+
+    pub fn get_num_inserted(&self) -> u64 {
+        self.num_inserted
     }
 
     /// Inserts into the bloom filter and hashes the value.
     /// (used by nullifier queue)
     pub fn check_non_inclusion(&mut self, value: &[u8; 32], store: &mut [u8]) -> Result<()> {
-        let mut bloom_filter = BloomFilter::new(self.num_iters as usize, self.capacity, store)
-            .map_err(ProgramError::from)?;
+        let mut bloom_filter =
+            BloomFilter::new(self.num_iters as usize, self.bloomfilter_capacity, store)
+                .map_err(ProgramError::from)?;
         if bloom_filter.contains(value) {
             msg!("Value already exists in the bloom filter.");
             return err!(AccountCompressionErrorCode::BatchInsertFailed);
@@ -102,7 +118,7 @@ impl Batch {
         Ok(())
     }
 
-    // There should be more batches than root history array size, usablecapacity is capacity - root_history_capacity.
+    // There should be more batches than root history array size, usablecapacity is bloomfilter_capacity - root_history_capacity.
 
     /// Marks the batch so that it can be overwritten
     pub fn mark_with_sequence_number(&mut self, sequence_number: u64, sequence_threshold: u64) {
@@ -118,9 +134,10 @@ mod tests {
         Batch {
             id: 1,
             num_iters: 3,
-            capacity: 160_000,
+            bloomfilter_capacity: 160_000,
             num_inserted: 0,
-            hash_chain: [0u8; 32],
+            user_hash_chain: [0u8; 32],
+            prover_hash_chain: [0u8; 32],
             sequence_number: 0,
             value_capacity: 500,
         }
@@ -155,18 +172,18 @@ mod tests {
         for i in 0..batch.value_capacity {
             let mut value = [0u8; 32];
             value[24..].copy_from_slice(&i.to_be_bytes());
-            let ref_hash_chain = Poseidon::hashv(&[&batch.hash_chain, &value]).unwrap();
+            let ref_hash_chain = Poseidon::hashv(&[&batch.user_hash_chain, &value]).unwrap();
             assert!(batch
                 .insert_and_store(&value, &mut store, &mut value_store)
                 .is_ok());
             let mut bloomfilter = BloomFilter {
                 num_iters: batch.num_iters as usize,
-                capacity: batch.capacity,
+                capacity: batch.bloomfilter_capacity,
                 store: &mut store,
             };
             assert!(bloomfilter.contains(&value));
             ref_batch.num_inserted += 1;
-            ref_batch.hash_chain = ref_hash_chain;
+            ref_batch.user_hash_chain = ref_hash_chain;
             assert_eq!(batch, ref_batch);
             assert_eq!(*value_store.get(i as usize).unwrap(), value);
         }
@@ -182,11 +199,11 @@ mod tests {
         for i in 0..batch.value_capacity {
             let mut value = [0u8; 32];
             value[24..].copy_from_slice(&i.to_be_bytes());
-            let ref_hash_chain = Poseidon::hashv(&[&batch.hash_chain, &value]).unwrap();
+            let ref_hash_chain = Poseidon::hashv(&[&batch.user_hash_chain, &value]).unwrap();
             assert!(batch.store_and_hash(&value, &mut value_store).is_ok());
 
             ref_batch.num_inserted += 1;
-            ref_batch.hash_chain = ref_hash_chain;
+            ref_batch.user_hash_chain = ref_hash_chain;
             assert_eq!(batch, ref_batch);
             assert_eq!(*value_store.get(i as usize).unwrap(), value);
         }
@@ -221,16 +238,16 @@ mod tests {
         for i in 0..batch.value_capacity {
             let mut value = [0u8; 32];
             value[24..].copy_from_slice(&i.to_be_bytes());
-            let ref_hash_chain = Poseidon::hashv(&[&batch.hash_chain, &value]).unwrap();
+            let ref_hash_chain = Poseidon::hashv(&[&batch.user_hash_chain, &value]).unwrap();
             assert!(batch.insert(&value, &mut store).is_ok());
             let mut bloomfilter = BloomFilter {
                 num_iters: batch.num_iters as usize,
-                capacity: batch.capacity,
+                capacity: batch.bloomfilter_capacity,
                 store: &mut store,
             };
             assert!(bloomfilter.contains(&value));
             ref_batch.num_inserted += 1;
-            ref_batch.hash_chain = ref_hash_chain;
+            ref_batch.user_hash_chain = ref_hash_chain;
             assert_eq!(batch, ref_batch);
         }
     }
@@ -243,8 +260,8 @@ mod tests {
 
         assert!(batch.add_to_hash_chain(&value).is_ok());
         let mut ref_batch = get_test_batch();
-        let hash_chain = Poseidon::hashv(&[&[0u8; 32], &value]).unwrap();
-        ref_batch.hash_chain = hash_chain;
+        let user_hash_chain = Poseidon::hashv(&[&[0u8; 32], &value]).unwrap();
+        ref_batch.user_hash_chain = user_hash_chain;
         ref_batch.num_inserted = 1;
         assert_eq!(batch, ref_batch);
     }
