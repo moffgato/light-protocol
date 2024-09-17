@@ -540,10 +540,11 @@ async fn test_custom_forester() {
                 .await
                 .unwrap();
 
-            let indexer_state = e2e_env.indexer.state.read().await;
+            let state_merkle_trees = e2e_env.indexer.state.state_merkle_trees.read().await;
+            let address_merkle_trees = e2e_env.indexer.state.address_merkle_trees.read().await;
             (
-                indexer_state.state_merkle_trees[0].clone(),
-                indexer_state.address_merkle_trees[0].clone(),
+                state_merkle_trees[0].clone(),
+                address_merkle_trees[0].clone(),
                 e2e_env.rpc,
             )
         };
@@ -736,10 +737,11 @@ async fn test_register_and_update_forester_pda() {
             .await
             .unwrap();
 
-        let indexer_state = e2e_env.indexer.state.read().await;
+        let state_merkle_trees = e2e_env.indexer.state.state_merkle_trees.read().await;
+        let address_merkle_trees = e2e_env.indexer.state.address_merkle_trees.read().await;
         (
-            indexer_state.state_merkle_trees[0].clone(),
-            indexer_state.address_merkle_trees[0].clone(),
+            state_merkle_trees[0].clone(),
+            address_merkle_trees[0].clone(),
             e2e_env.rpc,
         )
     };

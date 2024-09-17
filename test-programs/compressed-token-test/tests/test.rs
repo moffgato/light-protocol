@@ -3251,13 +3251,10 @@ async fn test_invalid_inputs() {
     .await;
     let payer = recipient_keypair.insecure_clone();
     let transfer_recipient_keypair = Keypair::new();
-    let indexer_state = test_indexer.state.read().await;
-    let input_compressed_account_token_data = indexer_state.token_compressed_accounts[0]
-        .token_data
-        .clone();
-    let input_compressed_accounts = vec![indexer_state.token_compressed_accounts[0]
-        .compressed_account
-        .clone()];
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+    let input_compressed_account_token_data = token_compressed_accounts[0].token_data.clone();
+    let input_compressed_accounts = vec![token_compressed_accounts[0].compressed_account.clone()];
+    drop(token_compressed_accounts); // Explicit drop to avoid deadlocks
     let proof_rpc_result = test_indexer
         .create_proof_for_compressed_accounts(
             Some(&[input_compressed_accounts[0].hash().unwrap()]),
@@ -3402,14 +3399,13 @@ async fn test_invalid_inputs() {
     }
     // Test 5: invalid input token data amount (0)
     {
-        let mut input_compressed_account_token_data_invalid_amount = indexer_state
-            .token_compressed_accounts[0]
-            .token_data
-            .clone();
+        let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+        let mut input_compressed_account_token_data_invalid_amount =
+            token_compressed_accounts[0].token_data.clone();
         input_compressed_account_token_data_invalid_amount.amount = 0;
-        let mut input_compressed_accounts = vec![indexer_state.token_compressed_accounts[0]
-            .compressed_account
-            .clone()];
+        let mut input_compressed_accounts =
+            vec![token_compressed_accounts[0].compressed_account.clone()];
+        drop(token_compressed_accounts); // Explicit drop to avoid deadlocks
         crate::TokenData::serialize(
             &input_compressed_account_token_data_invalid_amount,
             &mut input_compressed_accounts[0]
@@ -3452,13 +3448,13 @@ async fn test_invalid_inputs() {
     }
     // Test 6: invalid delegate
     {
-        let mut input_compressed_account_token_data = indexer_state.token_compressed_accounts[0]
-            .token_data
-            .clone();
+        let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+        let mut input_compressed_account_token_data =
+            token_compressed_accounts[0].token_data.clone();
         input_compressed_account_token_data.delegate = Some(Pubkey::new_unique());
-        let mut input_compressed_accounts = vec![indexer_state.token_compressed_accounts[0]
-            .compressed_account
-            .clone()];
+        let mut input_compressed_accounts =
+            vec![token_compressed_accounts[0].compressed_account.clone()];
+        drop(token_compressed_accounts); // Explicit drop to avoid deadlocks
         let mut vec = Vec::new();
         crate::TokenData::serialize(&input_compressed_account_token_data, &mut vec).unwrap();
         input_compressed_accounts[0]

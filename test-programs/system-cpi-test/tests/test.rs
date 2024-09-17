@@ -755,13 +755,14 @@ pub async fn assert_created_pda<R: RpcConnection>(
     seed: &[u8; 32],
     data: &[u8; 31],
 ) {
-    let indexer_state = test_indexer.state.read().await;
-    let compressed_escrow_pda = indexer_state
-        .compressed_accounts
-        .iter()
-        .find(|x| x.compressed_account.owner == ID)
-        .unwrap()
-        .clone();
+    let compressed_escrow_pda = {
+        let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+        compressed_accounts
+            .iter()
+            .find(|x| x.compressed_account.owner == ID)
+            .unwrap()
+            .clone()
+    };
     let address = derive_address(&env.address_merkle_tree_pubkey, seed).unwrap();
     assert_eq!(
         compressed_escrow_pda.compressed_account.address.unwrap(),
@@ -841,14 +842,15 @@ pub async fn perform_with_input_accounts<R: RpcConnection>(
         }),
         _ => None,
     };
-    let indexer_state = test_indexer.state.read().await;
-    let cpi_context_account_pubkey = indexer_state
-        .state_merkle_trees
-        .iter()
-        .find(|x| x.accounts.merkle_tree == merkle_tree_pubkey)
-        .unwrap()
-        .accounts
-        .cpi_context;
+    let cpi_context_account_pubkey = {
+        let state_merkle_trees = test_indexer.state.state_merkle_trees.read().await;
+        state_merkle_trees
+            .iter()
+            .find(|x| x.accounts.merkle_tree == merkle_tree_pubkey)
+            .unwrap()
+            .accounts
+            .cpi_context
+    };
     let rpc_result = test_indexer
         .create_proof_for_compressed_accounts(
             Some(&hashes),

@@ -63,6 +63,8 @@ impl<R: RpcConnection> Indexer<R> for PhotonIndexer<R> {
         )
         .await;
 
+        debug!("Response: {:?}", result);
+
         match result {
             Ok(response) => {
                 match response.result {

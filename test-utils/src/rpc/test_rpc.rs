@@ -107,6 +107,7 @@ impl RpcConnection for ProgramTestRpcConnection {
     where
         T: AnchorDeserialize + Send + Debug,
     {
+        println!("create_and_send_transaction_with_event");
         let mut context = self.context.write().await;
         let pre_balance = context
             .banks_client
@@ -114,6 +115,7 @@ impl RpcConnection for ProgramTestRpcConnection {
             .await?
             .unwrap()
             .lamports;
+        println!("pre_balance: {}", pre_balance);
 
         let transaction = Transaction::new_signed_with_payer(
             instruction,
@@ -122,6 +124,7 @@ impl RpcConnection for ProgramTestRpcConnection {
             context.get_new_latest_blockhash().await?,
         );
         drop(context);
+        println!("transaction: {:?}", transaction);
 
         let signature = transaction.signatures[0];
         // Simulate the transaction. Currently, in banks-client/server, only
@@ -135,6 +138,7 @@ impl RpcConnection for ProgramTestRpcConnection {
                 .simulate_transaction(transaction.clone())
                 .await?
         };
+        println!("simulation_result: {:?}", simulation_result);
 
         // Handle an error nested in the simulation result.
         if let Some(Err(e)) = simulation_result.result {
@@ -142,6 +146,7 @@ impl RpcConnection for ProgramTestRpcConnection {
                 TransactionError::InstructionError(_, _) => RpcError::TransactionError(e),
                 _ => RpcError::from(BanksClientError::TransactionError(e)),
             };
+            println!("error: {:?}", error);
             return Err(error);
         }
 
@@ -154,6 +159,7 @@ impl RpcConnection for ProgramTestRpcConnection {
                     T::try_from_slice(inner_instruction.instruction.data.as_slice()).ok()
                 })
             });
+        println!("event: {:?}", event);
         // If transaction was successful, execute it.
         if let Some(Ok(())) = simulation_result.result {
             let result = {
@@ -166,6 +172,7 @@ impl RpcConnection for ProgramTestRpcConnection {
                 return Err(error);
             }
         }
+        println!("transaction_params: {:?}", transaction_params);
 
         // assert correct rollover fee and network_fee distribution
         if let Some(transaction_params) = transaction_params {
@@ -173,6 +180,7 @@ impl RpcConnection for ProgramTestRpcConnection {
             deduped_signers.dedup();
             let post_balance = self.get_account(*payer).await?.unwrap().lamports;
 
+            println!("post_balance: {}", post_balance);
             // a network_fee is charged if there are input compressed accounts or new addresses
             let mut network_fee: i64 = 0;
             if transaction_params.num_input_compressed_accounts != 0 {
@@ -215,11 +223,16 @@ impl RpcConnection for ProgramTestRpcConnection {
             }
         }
 
+        println!("event: {:?}", event);
+
         let slot = {
             let mut context = self.context.write().await;
             context.banks_client.get_root_slot().await?
         };
+        println!("slot: {:?}", slot);
+
         let result = event.map(|event| (event, signature, slot));
+        println!("result: {:?}", result);
         Ok(result)
     }
 

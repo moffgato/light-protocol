@@ -210,10 +210,11 @@ async fn create_escrow_ix<R: RpcConnection>(
     lock_up_time: u64,
     escrow_amount: u64,
 ) -> (anchor_lang::prelude::Pubkey, Instruction) {
-    let indexer_state = test_indexer.state.read().await;
     let payer_pubkey = payer.pubkey();
-    let input_compressed_token_account_data = indexer_state.token_compressed_accounts[0].clone();
-
+    let input_compressed_token_account_data = {
+        let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+        token_compressed_accounts[0].clone()
+    };
     let compressed_input_account_with_context = input_compressed_token_account_data
         .compressed_account
         .clone();
@@ -284,27 +285,29 @@ pub async fn assert_escrow<R: RpcConnection>(
     seed: &[u8; 32],
     lock_up_time: &u64,
 ) {
-    let indexer_state = test_indexer.state.read().await;
     let payer_pubkey = payer.pubkey();
     let token_owner_pda = get_token_owner_pda(&payer_pubkey).0;
-    let token_data_escrow = indexer_state
-        .token_compressed_accounts
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+
+    let token_data_escrow = token_compressed_accounts
         .iter()
         .find(|x| x.token_data.owner == token_owner_pda)
         .unwrap()
         .token_data
         .clone();
+
     assert_eq!(token_data_escrow.amount, *escrow_amount);
     assert_eq!(token_data_escrow.owner, token_owner_pda);
 
     let token_data_change_compressed_token_account_exist =
-        indexer_state.token_compressed_accounts.iter().any(|x| {
+        token_compressed_accounts.iter().any(|x| {
             x.token_data.owner == payer.pubkey() && x.token_data.amount == amount - escrow_amount
         });
     assert!(token_data_change_compressed_token_account_exist);
+    drop(token_compressed_accounts); // drop the read lock
 
-    let compressed_escrow_pda = indexer_state
-        .compressed_accounts
+    let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+    let compressed_escrow_pda = compressed_accounts
         .iter()
         .find(|x| x.compressed_account.owner == token_escrow::ID)
         .unwrap()
@@ -410,22 +413,25 @@ pub async fn perform_withdrawal<R: RpcConnection>(
     new_lock_up_time: u64,
     escrow_amount: u64,
 ) -> Instruction {
-    let indexer_state = test_indexer.state.read().await;
     let payer_pubkey = payer.pubkey();
-    let compressed_escrow_pda = indexer_state
-        .compressed_accounts
-        .iter()
-        .find(|x| x.compressed_account.owner == token_escrow::ID)
-        .unwrap()
-        .clone();
+    let compressed_escrow_pda = {
+        let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+        compressed_accounts
+            .iter()
+            .find(|x| x.compressed_account.owner == token_escrow::ID)
+            .unwrap()
+            .clone()
+    };
     println!("compressed_escrow_pda {:?}", compressed_escrow_pda);
     let token_owner_pda = get_token_owner_pda(&payer_pubkey).0;
-    let token_escrow = indexer_state
-        .token_compressed_accounts
-        .iter()
-        .find(|x| x.token_data.owner == token_owner_pda)
-        .unwrap()
-        .clone();
+    let token_escrow = {
+        let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+        token_compressed_accounts
+            .iter()
+            .find(|x| x.token_data.owner == token_owner_pda)
+            .unwrap()
+            .clone()
+    };
     let token_escrow_account = token_escrow.compressed_account.clone();
     let token_escrow_account_hash = token_escrow_account
         .compressed_account
@@ -506,31 +512,32 @@ pub async fn assert_withdrawal<R: RpcConnection>(
     seed: &[u8; 32],
     lock_up_time: u64,
 ) {
-    let indexer_state = test_indexer.state.read().await;
     let escrow_change_amount = escrow_amount - withdrawal_amount;
     let payer_pubkey = payer.pubkey();
     let token_owner_pda = get_token_owner_pda(&payer_pubkey).0;
-    let token_data_escrow = indexer_state.token_compressed_accounts.iter().any(|x| {
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+    let token_data_escrow = token_compressed_accounts.iter().any(|x| {
         x.token_data.owner == token_owner_pda && x.token_data.amount == escrow_change_amount
     });
+    let withdrawal_account_exits = token_compressed_accounts
+        .iter()
+        .any(|x| x.token_data.owner == payer.pubkey() && x.token_data.amount == *withdrawal_amount);
+    drop(token_compressed_accounts); // drop the read lock
 
     assert!(
         token_data_escrow,
         "change escrow token account does not exist or has incorrect amount",
     );
-    let withdrawal_account_exits = indexer_state
-        .token_compressed_accounts
-        .iter()
-        .any(|x| x.token_data.owner == payer.pubkey() && x.token_data.amount == *withdrawal_amount);
+
     assert!(withdrawal_account_exits);
 
-    let compressed_escrow_pda = indexer_state
-        .compressed_accounts
+    let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+    let compressed_escrow_pda = compressed_accounts
         .iter()
         .find(|x| x.compressed_account.owner == token_escrow::ID)
         .unwrap()
         .clone();
-
+    drop(compressed_accounts); // drop the read lock
     let address = derive_address(&env.address_merkle_tree_pubkey, seed).unwrap();
     assert_eq!(
         compressed_escrow_pda.compressed_account.address.unwrap(),

@@ -885,11 +885,9 @@ pub async fn create_instruction_and_failing_transaction(
 #[tokio::test]
 async fn invoke_test() {
     let (context, env) = setup_test_programs_with_accounts(None).await;
-
     let payer = context.get_payer().await;
     let test_indexer =
         TestIndexer::<ProgramTestRpcConnection>::init_from_env(&payer, &env, true, true).await;
-
     let payer_pubkey = payer.pubkey();
 
     let merkle_tree_pubkey = env.merkle_tree_pubkey;
@@ -933,6 +931,7 @@ async fn invoke_test() {
         .await
         .unwrap()
         .unwrap();
+
     let (created_compressed_accounts, _) = test_indexer
         .add_event_and_compressed_accounts(&event.0)
         .await;
@@ -1013,8 +1012,10 @@ async fn invoke_test() {
     // create Merkle proof
     // get zkp from server
     // create instruction as usual with correct zkp
-    let indexer_state = test_indexer.state.read().await;
-    let compressed_account_with_context = indexer_state.compressed_accounts[0].clone();
+    let compressed_account_with_context = {
+        let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+        compressed_accounts[0].clone()
+    };
     let proof_rpc_res = test_indexer
         .create_proof_for_compressed_accounts(
             Some(&[compressed_account_with_context
@@ -1071,6 +1072,8 @@ async fn invoke_test() {
         .await
         .unwrap()
         .unwrap();
+
+    println!("event: {:?}", event);
     test_indexer
         .add_event_and_compressed_accounts(&event.0)
         .await;
@@ -1208,8 +1211,10 @@ async fn test_with_address() {
     // transfer with address
     println!("transfer with address-------------------------");
 
-    let indexer_state = test_indexer.state.read().await;
-    let compressed_account_with_context = indexer_state.compressed_accounts[0].clone();
+    let compressed_account_with_context = {
+        let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+        compressed_accounts[0].clone()
+    };
     let recipient_pubkey = Keypair::new().pubkey();
     transfer_compressed_sol_test(
         &context,
@@ -1224,20 +1229,18 @@ async fn test_with_address() {
     )
     .await
     .unwrap();
-    assert_eq!(indexer_state.compressed_accounts.len(), 1);
-    assert_eq!(
-        indexer_state.compressed_accounts[0]
-            .compressed_account
-            .address
-            .unwrap(),
-        derived_address
-    );
-    assert_eq!(
-        indexer_state.compressed_accounts[0]
-            .compressed_account
-            .owner,
-        recipient_pubkey
-    );
+    {
+        let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+        assert_eq!(compressed_accounts.len(), 1);
+        assert_eq!(
+            compressed_accounts[0].compressed_account.address.unwrap(),
+            derived_address
+        );
+        assert_eq!(
+            compressed_accounts[0].compressed_account.owner,
+            recipient_pubkey
+        );
+    }
 
     let address_seed_2 = [2u8; 32];
 
@@ -1424,8 +1427,11 @@ async fn test_with_compression() {
     .await
     .unwrap();
 
-    let indexer_state = test_indexer.state.read().await;
-    let compressed_account_with_context = indexer_state.compressed_accounts.last().unwrap().clone();
+    let compressed_account_with_context = {
+        let compressed_accounts = test_indexer.state.compressed_accounts.read().await;
+        compressed_accounts.last().unwrap().clone()
+    };
+
     let proof_rpc_res = test_indexer
         .create_proof_for_compressed_accounts(
             Some(&[compressed_account_with_context

@@ -111,12 +111,15 @@ async fn test_program_owned_merkle_tree() {
         .add_compressed_accounts_with_token_data(&event.0)
         .await;
 
-    let indexer_state = test_indexer.state.read().await;
     assert_ne!(post_merkle_tree.root(), pre_merkle_tree.root());
-    assert_eq!(
-        post_merkle_tree.root(),
-        indexer_state.state_merkle_trees[1].merkle_tree.root()
-    );
+
+    {
+        let state_merkle_trees = test_indexer.state.state_merkle_trees.read().await;
+        assert_eq!(
+            post_merkle_tree.root(),
+            state_merkle_trees[1].merkle_tree.root()
+        );
+    }
 
     let invalid_program_owned_merkle_tree_keypair = Keypair::new();
     let invalid_program_owned_merkle_tree_pubkey =

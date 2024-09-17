@@ -201,9 +201,8 @@ pub async fn perform_escrow<R: RpcConnection>(
     escrow_amount: &u64,
     lock_up_time: &u64,
 ) -> Instruction {
-    let indexer_state = test_indexer.state.read().await;
-    let input_compressed_token_account_data = indexer_state
-        .token_compressed_accounts
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
+    let input_compressed_token_account_data = token_compressed_accounts
         .iter()
         .find(|x| {
             println!("searching token account: {:?}", x.token_data);
@@ -324,10 +323,9 @@ pub async fn assert_escrow<R: RpcConnection>(
     escrow_amount: u64,
     lock_up_time: &u64,
 ) {
-    let indexer_state = test_indexer.state.read().await;
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
     let token_owner_pda = get_token_owner_pda(payer_pubkey).0;
-    let token_data_escrow = indexer_state
-        .token_compressed_accounts
+    let token_data_escrow = token_compressed_accounts
         .iter()
         .find(|x| x.token_data.owner == token_owner_pda)
         .unwrap()
@@ -336,9 +334,8 @@ pub async fn assert_escrow<R: RpcConnection>(
     assert_eq!(token_data_escrow.amount, escrow_amount);
     assert_eq!(token_data_escrow.owner, token_owner_pda);
 
-    let token_data_change_compressed_token_account = indexer_state.token_compressed_accounts[0]
-        .token_data
-        .clone();
+    let token_data_change_compressed_token_account =
+        token_compressed_accounts[0].token_data.clone();
     assert_eq!(
         token_data_change_compressed_token_account.amount,
         amount - escrow_amount
@@ -365,11 +362,10 @@ pub async fn perform_withdrawal<R: RpcConnection>(
     withdrawal_amount: &u64,
     invalid_signer: Option<Pubkey>,
 ) -> Instruction {
-    let indexer_state = test_indexer.state.read().await;
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
     let payer_pubkey = payer.pubkey();
     let token_owner_pda = get_token_owner_pda(&invalid_signer.unwrap_or(payer_pubkey)).0;
-    let escrow_token_data_with_context = indexer_state
-        .token_compressed_accounts
+    let escrow_token_data_with_context = token_compressed_accounts
         .iter()
         .find(|x| {
             x.token_data.owner == token_owner_pda && x.token_data.amount >= *withdrawal_amount
@@ -489,10 +485,9 @@ pub async fn assert_withdrawal<R: RpcConnection>(
     withdrawal_amount: u64,
     escrow_amount: u64,
 ) {
-    let indexer_state = test_indexer.state.read().await;
+    let token_compressed_accounts = test_indexer.state.token_compressed_accounts.read().await;
     let token_owner_pda = get_token_owner_pda(payer_pubkey).0;
-    let token_data_withdrawal = indexer_state
-        .token_compressed_accounts
+    let token_data_withdrawal = token_compressed_accounts
         .iter()
         .any(|x| x.token_data.owner == *payer_pubkey && x.token_data.amount == withdrawal_amount);
 
@@ -501,7 +496,7 @@ pub async fn assert_withdrawal<R: RpcConnection>(
         "Withdrawal compressed account doesn't exist or has incorrect amount {} expected amount",
         withdrawal_amount
     );
-    let token_data_escrow_change = indexer_state.token_compressed_accounts.iter().any(|x| {
+    let token_data_escrow_change = token_compressed_accounts.iter().any(|x| {
         x.token_data.owner == token_owner_pda
             && x.token_data.amount == escrow_amount - withdrawal_amount
     });

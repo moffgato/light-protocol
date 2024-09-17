@@ -307,7 +307,7 @@ impl<R: RpcConnection, I: Indexer<R> + 'static> EpochManager<R, I> {
 
             if let Err(e) =
                 wait_until_slot_reached(&*rpc, &self.slot_tracker, next_phases.registration.start)
-            .await
+                    .await
             {
                 error!("Error waiting for next registration phase: {:?}", e);
                 continue;
@@ -487,8 +487,7 @@ impl<R: RpcConnection, I: Indexer<R> + 'static> EpochManager<R, I> {
     ))]
     async fn register_for_epoch(&self, epoch: u64) -> Result<ForesterEpochInfo> {
         info!("Registering for epoch: {}", epoch);
-        let rpc =
-            SolanaRpcConnection::new(self.config.external_services.rpc_url.as_str(), None);
+        let rpc = SolanaRpcConnection::new(self.config.external_services.rpc_url.as_str(), None);
         let slot = rpc.get_slot().await?;
         let phases = get_epoch_phases(&self.protocol_config, epoch);
 
@@ -516,29 +515,26 @@ impl<R: RpcConnection, I: Indexer<R> + 'static> EpochManager<R, I> {
 
             let registration_info = {
                 debug!("Registering epoch {}", epoch);
-                let registered_epoch = match Epoch::register(
-                    &rpc,
-                    &self.protocol_config,
-                    &self.config.payer_keypair,
-                )
-                .await
-                {
-                    Ok(Some(epoch)) => {
-                        debug!("Registered epoch: {:?}", epoch);
-                        epoch
-                    }
-                    Ok(None) => {
-                        return Err(ForesterError::Custom(
-                            "Epoch::register returned None".into(),
-                        ))
-                    }
-                    Err(e) => {
-                        return Err(ForesterError::Custom(format!(
-                            "Epoch::register failed: {:?}",
-                            e
-                        )))
-                    }
-                };
+                let registered_epoch =
+                    match Epoch::register(&rpc, &self.protocol_config, &self.config.payer_keypair)
+                        .await
+                    {
+                        Ok(Some(epoch)) => {
+                            debug!("Registered epoch: {:?}", epoch);
+                            epoch
+                        }
+                        Ok(None) => {
+                            return Err(ForesterError::Custom(
+                                "Epoch::register returned None".into(),
+                            ))
+                        }
+                        Err(e) => {
+                            return Err(ForesterError::Custom(format!(
+                                "Epoch::register failed: {:?}",
+                                e
+                            )))
+                        }
+                    };
 
                 let forester_epoch_pda = match rpc
                     .get_anchor_account::<ForesterEpochPda>(&registered_epoch.forester_epoch_pda)
@@ -805,7 +801,7 @@ impl<R: RpcConnection, I: Indexer<R> + 'static> EpochManager<R, I> {
                 let rpc = self.rpc_pool.get_connection().await?;
                 // Wait until next eligible light slot is reached (until the start solana slot is reached)
                 wait_until_slot_reached(&*rpc, &self.slot_tracker, forester_slot.start_solana_slot)
-                .await?;
+                    .await?;
 
                 let light_slot_timeout = {
                     let slot_length_u32 = u32::try_from(epoch_pda.protocol_config.slot_length)
@@ -931,8 +927,7 @@ impl<R: RpcConnection, I: Indexer<R> + 'static> EpochManager<R, I> {
     ))]
     async fn report_work(&self, epoch_info: &ForesterEpochInfo) -> Result<()> {
         info!("Reporting work");
-        let rpc =
-            SolanaRpcConnection::new(self.config.external_services.rpc_url.as_str(), None);
+        let rpc = SolanaRpcConnection::new(self.config.external_services.rpc_url.as_str(), None);
 
         let forester_epoch_pda_pubkey = get_forester_epoch_pda_from_authority(
             &self.config.payer_keypair.pubkey(),
@@ -1023,7 +1018,7 @@ impl<R: RpcConnection, I: Indexer<R> + 'static> EpochManager<R, I> {
             }
             TreeType::State => {
                 rollover_state_merkle_tree(self.config.clone(), &*rpc, &*self.indexer, tree_account)
-                .await
+                    .await
             }
         };
 
