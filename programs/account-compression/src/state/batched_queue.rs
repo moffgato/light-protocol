@@ -95,6 +95,14 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
     pub fn insert_into_current_batch(&mut self, value: &[u8; 32]) -> Result<()> {
         let len = self.batches.len();
         let mut inserted = false;
+
+        if self.account.batch_size
+            == self.batches[self.account.currently_processing_batch_index as usize].num_inserted
+        {
+            println!("bump currently_processing_batch_index");
+            self.account.currently_processing_batch_index += 1;
+            self.account.currently_processing_batch_index %= len as u64;
+        }
         // insertion mode
         // Try to insert into the current queue.
         // In case the current queue fails, try to insert into the next queue.
@@ -103,18 +111,32 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
             ..(len as u64 + self.account.currently_processing_batch_index)
         {
             let index = index as usize % len;
-            let bloomfilter_stores = self.bloomfilter_stores.get_mut(index);
+
+            let mut bloomfilter_stores = self.bloomfilter_stores.get_mut(index);
             let value_store = self.value_vecs.get_mut(index);
             let current_batch = self.batches.get_mut(index).unwrap();
             let queue_type = QueueType::from(self.account.metadata.queue_type);
             let is_full = self.account.batch_size == current_batch.num_inserted;
+            let (can_be_filled, wipe_bloom_filter) =
+                current_batch.can_be_filled(self.account.sequence_number);
 
-            let can_be_filled = current_batch.can_be_filled(self.account.sequence_number);
-
-            // TODO: simplify
+            // TODO: implement more efficient bloom filter wipe this will not work onchain
+            if wipe_bloom_filter {
+                if let Some(blomfilter_stores) = bloomfilter_stores.as_mut() {
+                    (*blomfilter_stores)
+                        .as_mut_slice()
+                        .iter_mut()
+                        .for_each(|x| *x = 0);
+                }
+            }
+            println!(
+                "insert into current batch {:?} index: {:?}",
+                queue_type, index
+            );
             // TODO: remove unwraps
-            let insert_result = if !inserted && !is_full && can_be_filled {
-                match queue_type {
+            if !inserted && !is_full && can_be_filled {
+                println!("store value");
+                let insert_result = match queue_type {
                     QueueType::Address => current_batch.insert_and_store(
                         value,
                         bloomfilter_stores.unwrap().as_mut_slice(),
@@ -127,25 +149,32 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
                     QueueType::Output => current_batch.store_and_hash(value, value_store.unwrap()),
 
                     _ => err!(AccountCompressionErrorCode::InvalidQueueType),
-                }
-            } else {
-                current_batch.check_non_inclusion(value, bloomfilter_stores.unwrap().as_mut_slice())
-            };
-
-            match insert_result {
-                Ok(_) => {
-                    // For the output queue we only need to insert. For address
-                    // and input queues we need to prove non-inclusion as well
-                    // hence check every bloomfilter.
-                    if QueueType::Output == queue_type {
-                        return Ok(());
+                };
+                match insert_result {
+                    Ok(_) => {
+                        // For the output queue we only need to insert. For address
+                        // and input queues we need to prove non-inclusion as well
+                        // hence check every bloomfilter.
+                        if QueueType::Output == queue_type {
+                            return Ok(());
+                        }
+                        inserted = true;
                     }
-                    inserted = true;
+                    Err(error) => {
+                        return Err(error);
+                    }
                 }
-                Err(error) => {
-                    return Err(error);
-                }
+            } else if queue_type != QueueType::Output {
+                println!("check non inclusion");
+                current_batch
+                    .check_non_inclusion(value, bloomfilter_stores.unwrap().as_mut_slice())?;
             }
+        }
+
+        if !inserted {
+            println!("batch 0 {:?}", self.batches[0]);
+            println!("batch 1 {:?}", self.batches[1]);
+            return err!(AccountCompressionErrorCode::BatchInsertFailed);
         }
         Ok(())
     }
@@ -193,6 +222,8 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
             batches
                 .push(Batch {
                     id: i as u8,
+                    bloomfilter_store_id: i as u8,
+                    value_store_id: i as u8,
                     num_iters,
                     bloomfilter_capacity: account.bloom_filter_capacity,
                     user_hash_chain: [0; 32],
@@ -236,12 +267,14 @@ impl<'a> ZeroCopyBatchedAddressQueueAccount<'a> {
             self.account.next_full_batch_index
         );
         println!("batches.len(): {:?}", self.batches.len());
+        let batches_len = self.batches.len();
         let batch = self
             .batches
             .get_mut(self.account.next_full_batch_index as usize)
             .unwrap();
         if batch.is_ready_to_update_tree() {
             self.account.next_full_batch_index += 1;
+            self.account.next_full_batch_index %= batches_len as u64;
             Ok(batch)
         } else {
             err!(AccountCompressionErrorCode::BatchNotReady)

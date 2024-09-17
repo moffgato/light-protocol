@@ -64,4 +64,5 @@ pub enum AccountCompressionErrorCode {
     #[msg("BatchNotReady")]
     BatchNotReady,
     SizeMismatch,
+    BatchAlreadyInserted,
 }
