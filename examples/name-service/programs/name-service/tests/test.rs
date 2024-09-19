@@ -32,10 +32,10 @@ async fn test_name_service() {
         String::from("name_service"),
         name_service::ID,
     )]))
-        .await;
+    .await;
     let payer = rpc.get_payer().await.insecure_clone();
 
-    let test_indexer: TestIndexer<ProgramTestRpcConnection> = TestIndexer::new(
+    let mut test_indexer: TestIndexer<ProgramTestRpcConnection> = TestIndexer::new(
         &[StateMerkleTreeAccounts {
             merkle_tree: env.merkle_tree_pubkey,
             nullifier_queue: env.nullifier_queue_pubkey,
@@ -48,7 +48,7 @@ async fn test_name_service() {
         true,
         true,
     )
-        .await;
+    .await;
 
     let name = "example.io";
 
@@ -82,15 +82,15 @@ async fn test_name_service() {
         &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
         &PROGRAM_ID_ACCOUNT_COMPRESSION,
     )
-        .0;
+    .0;
 
     // Create the example.io -> 10.0.1.25 record.
     let rdata_1 = RData::A(Ipv4Addr::new(10, 0, 1, 25));
     create_record(
-        name,
+        &name,
         &rdata_1,
         &rpc,
-        &test_indexer,
+        &mut test_indexer,
         &env,
         &mut remaining_accounts,
         &payer,
@@ -101,15 +101,15 @@ async fn test_name_service() {
         &registered_program_pda,
         &PROGRAM_ID_LIGHT_SYSTEM,
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     // Create with invalid light-system-program ID, should not succeed.
     {
         let result = create_record(
-            name,
+            &name,
             &rdata_1,
-            &mut rpc,
+            &rpc,
             &mut test_indexer,
             &env,
             &mut remaining_accounts,
@@ -121,7 +121,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &Pubkey::new_unique(),
         )
-            .await;
+        .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -147,7 +147,7 @@ async fn test_name_service() {
     // Update the record to example.io -> 2001:db8::1.
     let rdata_2 = RData::AAAA(Ipv6Addr::new(8193, 3512, 0, 0, 0, 0, 0, 1));
     update_record(
-        &mut rpc,
+        &rpc,
         &mut test_indexer,
         &mut remaining_accounts,
         &rdata_2,
@@ -158,8 +158,8 @@ async fn test_name_service() {
         &registered_program_pda,
         &PROGRAM_ID_LIGHT_SYSTEM,
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     // Update with invalid owner, should not succeed.
     {
@@ -168,7 +168,7 @@ async fn test_name_service() {
             .await
             .unwrap();
         let result = update_record(
-            &mut rpc,
+            &rpc,
             &mut test_indexer,
             &mut remaining_accounts,
             &rdata_2,
@@ -179,7 +179,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &PROGRAM_ID_LIGHT_SYSTEM,
         )
-            .await;
+        .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -190,7 +190,7 @@ async fn test_name_service() {
     // Update with invalid light-system-program ID, should not succeed.
     {
         let result = update_record(
-            &mut rpc,
+            &rpc,
             &mut test_indexer,
             &mut remaining_accounts,
             &rdata_2,
@@ -201,7 +201,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &Pubkey::new_unique(),
         )
-            .await;
+        .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -231,7 +231,7 @@ async fn test_name_service() {
             .await
             .unwrap();
         let result = delete_record(
-            &mut rpc,
+            &rpc,
             &mut test_indexer,
             &mut remaining_accounts,
             &invalid_signer,
@@ -241,7 +241,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &PROGRAM_ID_LIGHT_SYSTEM,
         )
-            .await;
+        .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -252,7 +252,7 @@ async fn test_name_service() {
     // Delete with invalid light-system-program ID, should not succeed.
     {
         let result = delete_record(
-            &mut rpc,
+            &rpc,
             &mut test_indexer,
             &mut remaining_accounts,
             &payer,
@@ -262,7 +262,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &Pubkey::new_unique(),
         )
-            .await;
+        .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -273,7 +273,7 @@ async fn test_name_service() {
 
     // Delete the example.io record.
     delete_record(
-        &mut rpc,
+        &rpc,
         &mut test_indexer,
         &mut remaining_accounts,
         &payer,
@@ -283,16 +283,15 @@ async fn test_name_service() {
         &registered_program_pda,
         &PROGRAM_ID_LIGHT_SYSTEM,
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn create_record<R>(
     name: &str,
     rdata: &RData,
     rpc: &R,
-    test_indexer: &TestIndexer<R>,
+    test_indexer: &mut TestIndexer<R>,
     env: &EnvAccounts,
     remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
@@ -356,9 +355,8 @@ where
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn update_record<R>(
-    rpc: &mut R,
+    rpc: &R,
     test_indexer: &mut TestIndexer<R>,
     remaining_accounts: &mut RemainingAccounts,
     new_rdata: &RData,
@@ -435,9 +433,8 @@ where
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn delete_record<R>(
-    rpc: &mut R,
+    rpc: &R,
     test_indexer: &mut TestIndexer<R>,
     remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
@@ -509,7 +506,7 @@ where
         &[instruction],
         Some(&payer.pubkey()),
         &[&payer],
-        rpc.get_latest_blockhash().await?,
+        rpc.get_latest_blockhash().await.unwrap(),
     );
     rpc.process_transaction(transaction).await?;
     Ok(())
