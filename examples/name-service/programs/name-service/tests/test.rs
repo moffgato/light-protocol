@@ -28,12 +28,12 @@ use solana_sdk::transaction::{Transaction, TransactionError};
 
 #[tokio::test]
 async fn test_name_service() {
-    let (rpc, env) = setup_test_programs_with_accounts(Some(vec![(
+    let (rpc, env) = setup_test_programs_with_accounts_v2(Some(vec![(
         String::from("name_service"),
         name_service::ID,
     )]))
-    .await;
-    let payer = rpc.get_payer().await;
+        .await;
+    let payer = rpc.get_payer().await.insecure_clone();
 
     let test_indexer: TestIndexer<ProgramTestRpcConnection> = TestIndexer::new(
         &[StateMerkleTreeAccounts {
@@ -48,7 +48,7 @@ async fn test_name_service() {
         true,
         true,
     )
-    .await;
+        .await;
 
     let name = "example.io";
 
@@ -72,8 +72,7 @@ async fn test_name_service() {
         &name_service::ID,
         &address_merkle_context,
     );
-    println!("ADDRESS_SEED: {address_seed:?}");
-    let address = derive_address(&env.address_merkle_tree_pubkey, &address_seed).unwrap();
+    let address = derive_address(&address_seed, &address_merkle_context);
 
     let address_merkle_context =
         pack_address_merkle_context(address_merkle_context, &mut remaining_accounts);
@@ -83,7 +82,7 @@ async fn test_name_service() {
         &[PROGRAM_ID_LIGHT_SYSTEM.to_bytes().as_slice()],
         &PROGRAM_ID_ACCOUNT_COMPRESSION,
     )
-    .0;
+        .0;
 
     // Create the example.io -> 10.0.1.25 record.
     let rdata_1 = RData::A(Ipv4Addr::new(10, 0, 1, 25));
@@ -102,13 +101,13 @@ async fn test_name_service() {
         &registered_program_pda,
         &PROGRAM_ID_LIGHT_SYSTEM,
     )
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     // Create with invalid light-system-program ID, should not succeed.
     {
         let result = create_record(
-            &name,
+            name,
             &rdata_1,
             &mut rpc,
             &mut test_indexer,
@@ -122,7 +121,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &Pubkey::new_unique(),
         )
-        .await;
+            .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -132,9 +131,7 @@ async fn test_name_service() {
     }
 
     // Check that it was created correctly.
-    let compressed_accounts = test_indexer
-        .get_compressed_accounts_by_owner(&name_service::ID)
-        .await;
+    let compressed_accounts = test_indexer.get_compressed_accounts_by_owner(&name_service::ID);
     assert_eq!(compressed_accounts.len(), 1);
     let compressed_account = &compressed_accounts[0];
     let record = &compressed_account
@@ -150,8 +147,8 @@ async fn test_name_service() {
     // Update the record to example.io -> 2001:db8::1.
     let rdata_2 = RData::AAAA(Ipv6Addr::new(8193, 3512, 0, 0, 0, 0, 0, 1));
     update_record(
-        &rpc,
-        &test_indexer,
+        &mut rpc,
+        &mut test_indexer,
         &mut remaining_accounts,
         &rdata_2,
         &payer,
@@ -161,8 +158,8 @@ async fn test_name_service() {
         &registered_program_pda,
         &PROGRAM_ID_LIGHT_SYSTEM,
     )
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     // Update with invalid owner, should not succeed.
     {
@@ -170,10 +167,9 @@ async fn test_name_service() {
         rpc.airdrop_lamports(&invalid_signer.pubkey(), LAMPORTS_PER_SOL * 1)
             .await
             .unwrap();
-
         let result = update_record(
-            &rpc,
-            &test_indexer,
+            &mut rpc,
+            &mut test_indexer,
             &mut remaining_accounts,
             &rdata_2,
             &invalid_signer,
@@ -183,8 +179,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &PROGRAM_ID_LIGHT_SYSTEM,
         )
-        .await;
-
+            .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -195,8 +190,8 @@ async fn test_name_service() {
     // Update with invalid light-system-program ID, should not succeed.
     {
         let result = update_record(
-            &rpc,
-            &test_indexer,
+            &mut rpc,
+            &mut test_indexer,
             &mut remaining_accounts,
             &rdata_2,
             &payer,
@@ -206,7 +201,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &Pubkey::new_unique(),
         )
-        .await;
+            .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -216,9 +211,7 @@ async fn test_name_service() {
     }
 
     // Check that it was updated correctly.
-    let compressed_accounts = test_indexer
-        .get_compressed_accounts_by_owner(&name_service::ID)
-        .await;
+    let compressed_accounts = test_indexer.get_compressed_accounts_by_owner(&name_service::ID);
     assert_eq!(compressed_accounts.len(), 1);
     let compressed_account = &compressed_accounts[0];
     let record = &compressed_account
@@ -231,15 +224,15 @@ async fn test_name_service() {
     assert_eq!(record.name, "example.io");
     assert_eq!(record.rdata, rdata_2);
 
-    // Delete with invalid owner should not succeed.
+    // Delete with invalid owner, should not succeed.
     {
         let invalid_signer = Keypair::new();
         rpc.airdrop_lamports(&invalid_signer.pubkey(), LAMPORTS_PER_SOL * 1)
             .await
             .unwrap();
         let result = delete_record(
-            &rpc,
-            &test_indexer,
+            &mut rpc,
+            &mut test_indexer,
             &mut remaining_accounts,
             &invalid_signer,
             compressed_account,
@@ -248,7 +241,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &PROGRAM_ID_LIGHT_SYSTEM,
         )
-        .await;
+            .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -259,8 +252,8 @@ async fn test_name_service() {
     // Delete with invalid light-system-program ID, should not succeed.
     {
         let result = delete_record(
-            &rpc,
-            &test_indexer,
+            &mut rpc,
+            &mut test_indexer,
             &mut remaining_accounts,
             &payer,
             compressed_account,
@@ -269,7 +262,7 @@ async fn test_name_service() {
             &registered_program_pda,
             &Pubkey::new_unique(),
         )
-        .await;
+            .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
@@ -280,8 +273,8 @@ async fn test_name_service() {
 
     // Delete the example.io record.
     delete_record(
-        &rpc,
-        &test_indexer,
+        &mut rpc,
+        &mut test_indexer,
         &mut remaining_accounts,
         &payer,
         compressed_account,
@@ -290,10 +283,11 @@ async fn test_name_service() {
         &registered_program_pda,
         &PROGRAM_ID_LIGHT_SYSTEM,
     )
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn create_record<R>(
     name: &str,
     rdata: &RData,
@@ -362,9 +356,10 @@ where
     Ok(())
 }
 
-async fn update_record<R: RpcConnection>(
-    rpc: &R,
-    test_indexer: &TestIndexer<R>,
+#[allow(clippy::too_many_arguments)]
+async fn update_record<R>(
+    rpc: &mut R,
+    test_indexer: &mut TestIndexer<R>,
     remaining_accounts: &mut RemainingAccounts,
     new_rdata: &RData,
     payer: &Keypair,
@@ -441,9 +436,9 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn delete_record<R: RpcConnection>(
-    rpc: &R,
-    test_indexer: &TestIndexer<R>,
+async fn delete_record<R>(
+    rpc: &mut R,
+    test_indexer: &mut TestIndexer<R>,
     remaining_accounts: &mut RemainingAccounts,
     payer: &Keypair,
     compressed_account: &CompressedAccountWithMerkleContext,
@@ -514,7 +509,7 @@ where
         &[instruction],
         Some(&payer.pubkey()),
         &[&payer],
-        rpc.get_latest_blockhash().await.unwrap(),
+        rpc.get_latest_blockhash().await?,
     );
     rpc.process_transaction(transaction).await?;
     Ok(())
