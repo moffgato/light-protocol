@@ -24,8 +24,8 @@ async fn main() -> Result<(), ForesterError> {
             let config = Arc::new(ForesterConfig::new_for_start(args)?);
 
             if config.general_config.enable_metrics {
-        register_metrics();
-    }
+                register_metrics();
+            }
 
             let (shutdown_sender, shutdown_receiver) = oneshot::channel();
             let (work_report_sender, mut work_report_receiver) = mpsc::channel(100);
@@ -45,11 +45,11 @@ async fn main() -> Result<(), ForesterError> {
 
             let indexer_rpc =
                 SolanaRpcConnection::new(config.external_services.rpc_url.clone(), None);
-            let indexer = Arc::new(tokio::sync::Mutex::new(PhotonIndexer::new(
+            let indexer = Arc::new(PhotonIndexer::new(
                 config.external_services.indexer_url.clone().unwrap(),
                 config.external_services.photon_api_key.clone(),
                 indexer_rpc,
-            )));
+            ));
 
             run_pipeline(config, indexer, shutdown_receiver, work_report_sender).await?
         }

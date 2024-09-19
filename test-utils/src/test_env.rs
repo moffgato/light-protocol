@@ -387,6 +387,7 @@ pub async fn setup_test_programs_with_accounts_with_protocol_config_v2(
     EnvAccounts,
 ) {
     let context = setup_test_programs(additional_programs).await;
+    let context = Arc::new(RwLock::new(context));
     let context = light_client::rpc::test_rpc::ProgramTestRpcConnection { context };
     let keypairs = EnvAccountKeypairs::program_test_default();
     airdrop_lamports(

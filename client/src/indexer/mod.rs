@@ -32,7 +32,7 @@ pub enum IndexerError {
     Unknown,
 }
 
-pub trait Indexer<R: RpcConnection>: Sync + Send + Debug + 'static {
+pub trait Indexer<R: RpcConnection>: Sync + Send + 'static {
     fn add_event_and_compressed_accounts(
         &mut self,
         event: &PublicTransactionEvent,

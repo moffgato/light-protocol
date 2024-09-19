@@ -388,7 +388,7 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
                             .token_compressed_accounts
                             .write()
                             .await
-                            .push(token_account);
+                            .insert(0, token_account);
                     }
                 }
                 _ => {
@@ -397,7 +397,7 @@ impl<R: RpcConnection> Indexer<R> for TestIndexer<R> {
                         .compressed_accounts
                         .write()
                         .await
-                        .push(new_account);
+                        .insert(0, new_account);
                 }
             };
         }

@@ -117,12 +117,12 @@ async fn test_name_service() {
             &payer,
             &address,
             &merkle_context,
-        &address_merkle_context,
-        &account_compression_authority,
-        &registered_program_pda,
+            &address_merkle_context,
+            &account_compression_authority,
+            &registered_program_pda,
             &Pubkey::new_unique(),
-    )
-    .await;
+        )
+        .await;
         assert!(matches!(
             result,
             Err(RpcError::TransactionError(
