@@ -87,7 +87,12 @@ func SetupNonInclusion(treeDepth uint32, numberOfCompressedAccounts uint32) (*Pr
 	if err != nil {
 		return nil, err
 	}
-	return &ProvingSystem{0, 0, treeDepth, numberOfCompressedAccounts, pk, vk, ccs}, nil
+	return &ProvingSystem{
+		NonInclusionTreeDepth:                  treeDepth,
+		NonInclusionNumberOfCompressedAccounts: numberOfCompressedAccounts,
+		ProvingKey:                             pk,
+		VerifyingKey:                           vk,
+		ConstraintSystem:                       ccs}, nil
 }
 
 func (ps *ProvingSystem) ProveNonInclusion(params *NonInclusionParameters) (*Proof, error) {

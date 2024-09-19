@@ -75,7 +75,12 @@ func SetupInclusion(treeDepth uint32, numberOfCompressedAccounts uint32) (*Provi
 	if err != nil {
 		return nil, err
 	}
-	return &ProvingSystem{treeDepth, numberOfCompressedAccounts, 0, 0, pk, vk, ccs}, nil
+	return &ProvingSystem{
+		InclusionTreeDepth:                  treeDepth,
+		InclusionNumberOfCompressedAccounts: numberOfCompressedAccounts,
+		ProvingKey:                          pk,
+		VerifyingKey:                        vk,
+		ConstraintSystem:                    ccs}, nil
 }
 
 func (ps *ProvingSystem) ProveInclusion(params *InclusionParameters) (*Proof, error) {

@@ -87,5 +87,10 @@ func ImportNonInclusionSetup(treeDepth uint32, numberOfCompressedAccounts uint32
 		return nil, err
 	}
 
-	return &ProvingSystem{0, 0, treeDepth, numberOfCompressedAccounts, pk, vk, ccs}, nil
+	return &ProvingSystem{
+		NonInclusionTreeDepth:                  treeDepth,
+		NonInclusionNumberOfCompressedAccounts: numberOfCompressedAccounts,
+		ProvingKey:                             pk,
+		VerifyingKey:                           vk,
+		ConstraintSystem:                       ccs}, nil
 }

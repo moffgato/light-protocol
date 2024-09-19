@@ -32,17 +32,19 @@ func runCli() {
 			{
 				Name: "setup",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "circuit", Usage: "Type of circuit (\"inclusion\" / \"non-inclusion\" / \"combined\")", Required: true},
+					&cli.StringFlag{Name: "circuit", Usage: "Type of circuit (\"inclusion\" / \"non-inclusion\" / \"combined\" / \"insertion\" )", Required: true},
 					&cli.StringFlag{Name: "output", Usage: "Output file", Required: true},
 					&cli.StringFlag{Name: "output-vkey", Usage: "Output file", Required: true},
 					&cli.UintFlag{Name: "inclusion-tree-depth", Usage: "Merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "inclusion-compressed-accounts", Usage: "Number of compressed accounts", Required: false},
 					&cli.UintFlag{Name: "non-inclusion-tree-depth", Usage: "Non-inclusion merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "non-inclusion-compressed-accounts", Usage: "Non-inclusion number of compressed accounts", Required: false},
+					&cli.UintFlag{Name: "insertion-tree-depth", Usage: "Insertion merkle tree depth", Required: false},
+					&cli.UintFlag{Name: "insertion-batch-size", Usage: "Insertion batch size", Required: false},
 				},
 				Action: func(context *cli.Context) error {
 					circuit := prover.CircuitType(context.String("circuit"))
-					if circuit != prover.Inclusion && circuit != prover.NonInclusion && circuit != prover.Combined {
+					if circuit != prover.Inclusion && circuit != prover.NonInclusion && circuit != prover.Combined && circuit != prover.Insertion {
 						return fmt.Errorf("invalid circuit type %s", circuit)
 					}
 
@@ -52,6 +54,8 @@ func runCli() {
 					inclusionNumberOfCompressedAccounts := uint32(context.Uint("inclusion-compressed-accounts"))
 					nonInclusionTreeDepth := uint32(context.Uint("non-inclusion-tree-depth"))
 					nonInclusionNumberOfCompressedAccounts := uint32(context.Uint("non-inclusion-compressed-accounts"))
+					insertionTreeDepth := uint32(context.Uint("insertion-tree-depth"))
+					insertionBatchSize := uint32(context.Uint("insertion-batch-size"))
 
 					if (inclusionTreeDepth == 0 || inclusionNumberOfCompressedAccounts == 0) && circuit == prover.Inclusion {
 						return fmt.Errorf("inclusion tree depth and number of compressed accounts must be provided")
@@ -70,11 +74,18 @@ func runCli() {
 						}
 					}
 
+					if (insertionTreeDepth == 0 || insertionBatchSize == 0) && circuit == prover.Insertion {
+						return fmt.Errorf("insertion tree depth and batch size must be provided")
+					}
+
 					logging.Logger().Info().Msg("Running setup")
 
 					var system *prover.ProvingSystem
 					var err error
-					system, err = prover.SetupCircuit(circuit, inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts)
+
+					logging.Logger().Info().Msg("Calling prover.SetupCircuit")
+					system, err = prover.SetupCircuit(circuit, inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts, insertionTreeDepth, insertionBatchSize)
+					logging.Logger().Info().Msg("Called prover.SetupCircuit")
 					if err != nil {
 						return err
 					}
@@ -112,15 +123,17 @@ func runCli() {
 				Name: "r1cs",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "output", Usage: "Output file", Required: true},
-					&cli.StringFlag{Name: "circuit", Usage: "Type of circuit (\"inclusion\" / \"non-inclusion\" / \"combined\")", Required: true},
+					&cli.StringFlag{Name: "circuit", Usage: "Type of circuit (\"inclusion\" / \"non-inclusion\" / \"combined\" / \"insertion\")", Required: true},
 					&cli.UintFlag{Name: "inclusion-tree-depth", Usage: "Merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "inclusion-compressed-accounts", Usage: "Number of compressed accounts", Required: false},
 					&cli.UintFlag{Name: "non-inclusion-tree-depth", Usage: "Non-inclusion merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "non-inclusion-compressed-accounts", Usage: "Non-inclusion number of compressed accounts", Required: false},
+					&cli.UintFlag{Name: "insertion-tree-depth", Usage: "Insertion merkle tree depth", Required: false},
+					&cli.UintFlag{Name: "insertion-batch-size", Usage: "Insertion batch size", Required: false},
 				},
 				Action: func(context *cli.Context) error {
-					circuit := context.String("circuit")
-					if circuit != "inclusion" && circuit != "non-inclusion" && circuit != "combined" {
+					circuit := prover.CircuitType(context.String("circuit"))
+					if circuit != prover.Inclusion && circuit != prover.NonInclusion && circuit != prover.Combined && circuit != prover.Insertion {
 						return fmt.Errorf("invalid circuit type %s", circuit)
 					}
 
@@ -129,6 +142,8 @@ func runCli() {
 					inclusionNumberOfCompressedAccounts := uint32(context.Uint("inclusion-compressed-accounts"))
 					nonInclusionTreeDepth := uint32(context.Uint("non-inclusion-tree-depth"))
 					nonInclusionNumberOfCompressedAccounts := uint32(context.Uint("non-inclusion-compressed-accounts"))
+					insertionTreeDepth := uint32(context.Uint("insertion-tree-depth"))
+					insertionBatchSize := uint32(context.Uint("insertion-batch-size"))
 
 					if (inclusionTreeDepth == 0 || inclusionNumberOfCompressedAccounts == 0) && circuit == "inclusion" {
 						return fmt.Errorf("inclusion tree depth and number of compressed accounts must be provided")
@@ -147,17 +162,23 @@ func runCli() {
 						}
 					}
 
+					if (insertionTreeDepth == 0 || insertionBatchSize == 0) && circuit == prover.Insertion {
+						return fmt.Errorf("insertion tree depth and batch size must be provided")
+					}
+
 					logging.Logger().Info().Msg("Building R1CS")
 
 					var cs constraint.ConstraintSystem
 					var err error
 
-					if circuit == "inclusion" {
+					if circuit == prover.Inclusion {
 						cs, err = prover.R1CSInclusion(inclusionTreeDepth, inclusionNumberOfCompressedAccounts)
-					} else if circuit == "non-inclusion" {
+					} else if circuit == prover.NonInclusion {
 						cs, err = prover.R1CSNonInclusion(nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts)
-					} else if circuit == "combined" {
+					} else if circuit == prover.Combined {
 						cs, err = prover.R1CSCombined(inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts)
+					} else if circuit == prover.Insertion {
+						cs, err = prover.R1CSInsertion(insertionTreeDepth, insertionBatchSize)
 					} else {
 						return fmt.Errorf("invalid circuit type %s", circuit)
 					}
@@ -194,6 +215,8 @@ func runCli() {
 					&cli.UintFlag{Name: "inclusion-compressed-accounts", Usage: "Number of compressed accounts", Required: false},
 					&cli.UintFlag{Name: "non-inclusion-tree-depth", Usage: "Non-inclusion merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "non-inclusion-compressed-accounts", Usage: "Non-inclusion number of compressed accounts", Required: false},
+					&cli.UintFlag{Name: "insertion-tree-depth", Usage: "Insertion merkle tree depth", Required: false},
+					&cli.UintFlag{Name: "insertion-batch-size", Usage: "Insertion batch size", Required: false},
 				},
 				Action: func(context *cli.Context) error {
 					circuit := context.String("circuit")
@@ -209,6 +232,8 @@ func runCli() {
 					inclusionNumberOfCompressedAccounts := uint32(context.Uint("inclusion-compressed-accounts"))
 					nonInclusionTreeDepth := uint32(context.Uint("non-inclusion-tree-depth"))
 					nonInclusionNumberOfCompressedAccounts := uint32(context.Uint("non-inclusion-compressed-accounts"))
+					insertionTreeDepth := uint32(context.Uint("insertion-tree-depth"))
+					insertionBatchSize := uint32(context.Uint("insertion-batch-size"))
 
 					if (inclusionTreeDepth == 0 || inclusionNumberOfCompressedAccounts == 0) && circuit == "inclusion" {
 						return fmt.Errorf("inclusion tree depth and number of compressed accounts must be provided")
@@ -227,12 +252,18 @@ func runCli() {
 						}
 					}
 
+					if (insertionTreeDepth == 0 || insertionBatchSize == 0) && circuit == "insertion" {
+						return fmt.Errorf("insertion tree depth and batch size must be provided")
+					}
+
 					var system *prover.ProvingSystem
 					var err error
 
 					logging.Logger().Info().Msg("Importing setup")
 
-					if circuit == "inclusion" {
+					if circuit == "insertion" {
+						system, err = prover.ImportInsertionSetup(insertionTreeDepth, insertionBatchSize, pk, vk)
+					} else if circuit == "inclusion" {
 						system, err = prover.ImportInclusionSetup(inclusionTreeDepth, inclusionNumberOfCompressedAccounts, pk, vk)
 					} else if circuit == "non-inclusion" {
 						system, err = prover.ImportNonInclusionSetup(nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts, pk, vk)
@@ -362,6 +393,7 @@ func runCli() {
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "inclusion", Usage: "Run inclusion circuit", Required: true},
 					&cli.BoolFlag{Name: "non-inclusion", Usage: "Run non-inclusion circuit", Required: false},
+					&cli.BoolFlag{Name: "insertion", Usage: "Run insertion circuit", Required: false},
 					&cli.StringFlag{Name: "keys-dir", Usage: "Directory where circuit key files are stored", Value: "./proving-keys/", Required: false},
 					&cli.StringSliceFlag{Name: "keys-file", Aliases: []string{"k"}, Value: cli.NewStringSlice(), Usage: "Proving system file"},
 				},
@@ -433,6 +465,24 @@ func runCli() {
 						for _, provingSystem := range ps {
 							if provingSystem.InclusionTreeDepth == params.TreeDepth() && provingSystem.InclusionNumberOfCompressedAccounts == params.NumberOfCompressedAccounts() && provingSystem.NonInclusionTreeDepth == params.NonInclusionTreeDepth() && provingSystem.InclusionNumberOfCompressedAccounts == params.NonInclusionNumberOfCompressedAccounts() {
 								proof, err = provingSystem.ProveCombined(&params)
+								if err != nil {
+									return err
+								}
+								r, _ := json.Marshal(&proof)
+								fmt.Println(string(r))
+								break
+							}
+						}
+					} else if context.Bool("insertion") {
+						var params prover.InsertionParameters
+						err = json.Unmarshal(inputsBytes, &params)
+						if err != nil {
+							return err
+						}
+
+						for _, provingSystem := range ps {
+							if provingSystem.Depth == params.TreeDepth() && provingSystem.BatchSize == params.BatchSize() {
+								proof, err = provingSystem.ProveInsertion(&params)
 								if err != nil {
 									return err
 								}
@@ -557,6 +607,7 @@ func runCli() {
 
 func LoadKeys(context *cli.Context) ([]*prover.ProvingSystem, error) {
 	keys, _ := getKeysByArgs(context)
+	fmt.Println("Keys loaded: ", keys)
 	var pss = make([]*prover.ProvingSystem, len(keys))
 	for i, key := range keys {
 		logging.Logger().Info().Msg("Reading proving system from file " + key + "...")
@@ -570,6 +621,8 @@ func LoadKeys(context *cli.Context) ([]*prover.ProvingSystem, error) {
 			Uint32("compressedAccounts", ps.InclusionNumberOfCompressedAccounts).
 			Uint32("nonInclusionTreeDepth", ps.NonInclusionTreeDepth).
 			Uint32("nonInclusionCompressedAccounts", ps.NonInclusionNumberOfCompressedAccounts).
+			Uint32("insertionTreeDepth", ps.Depth).
+			Uint32("insertionBatchSize", ps.BatchSize).
 			Msg("Read proving system")
 	}
 	return pss, nil
@@ -579,13 +632,19 @@ func getKeysByArgs(context *cli.Context) ([]string, error) {
 	var keysDir = context.String("keys-dir")
 	var inclusion = context.Bool("inclusion")
 	var nonInclusion = context.Bool("non-inclusion")
+	var insertion = context.Bool("insertion")
 	var circuitTypes []prover.CircuitType = make([]prover.CircuitType, 0)
+
 	if inclusion {
 		circuitTypes = append(circuitTypes, prover.Inclusion)
 	}
 
 	if nonInclusion {
 		circuitTypes = append(circuitTypes, prover.NonInclusion)
+	}
+
+	if insertion {
+		circuitTypes = append(circuitTypes, prover.Insertion)
 	}
 
 	if inclusion && nonInclusion {

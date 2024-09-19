@@ -8,20 +8,31 @@ import (
 type CircuitType string
 
 const (
-	InputCompressedAccounts             = "input-compressed-accounts"
-	Combined                CircuitType = "combined"
-	Inclusion               CircuitType = "inclusion"
-	NonInclusion            CircuitType = "non-inclusion"
+	Combined     CircuitType = "combined"
+	Inclusion    CircuitType = "inclusion"
+	NonInclusion CircuitType = "non-inclusion"
+	Insertion    CircuitType = "insertion"
 )
 
-func SetupCircuit(circuit CircuitType, inclusionTreeDepth uint32, inclusionNumberOfCompressedAccounts uint32, nonInclusionTreeDepth uint32, nonInclusionNumberOfCompressedAccounts uint32) (*ProvingSystem, error) {
-	if circuit == Inclusion {
+func SetupCircuit(
+	circuit CircuitType,
+	inclusionTreeDepth uint32,
+	inclusionNumberOfCompressedAccounts uint32,
+	nonInclusionTreeDepth uint32,
+	nonInclusionNumberOfCompressedAccounts uint32,
+	insertionTreeDepth uint32,
+	insertionBatchSize uint32,
+) (*ProvingSystem, error) {
+	switch circuit {
+	case Inclusion:
 		return SetupInclusion(inclusionTreeDepth, inclusionNumberOfCompressedAccounts)
-	} else if circuit == NonInclusion {
+	case NonInclusion:
 		return SetupNonInclusion(nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts)
-	} else if circuit == Combined {
+	case Combined:
 		return SetupCombined(inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts)
-	} else {
+	case Insertion:
+		return SetupInsertion(insertionTreeDepth, insertionBatchSize)
+	default:
 		return nil, fmt.Errorf("invalid circuit: %s", circuit)
 	}
 }
@@ -33,8 +44,9 @@ func ParseCircuitType(data []byte) (CircuitType, error) {
 		return "", err
 	}
 
-	var _, hasInputCompressedAccounts = inputs["input-compressed-accounts"]
-	var _, hasNewAddresses = inputs["new-addresses"]
+	_, hasInputCompressedAccounts := inputs["input-compressed-accounts"]
+	_, hasNewAddresses := inputs["new-addresses"]
+	_, hasInsertionInputs := inputs["insertion-inputs"]
 
 	if hasInputCompressedAccounts && hasNewAddresses {
 		return Combined, nil
@@ -42,6 +54,8 @@ func ParseCircuitType(data []byte) (CircuitType, error) {
 		return Inclusion, nil
 	} else if hasNewAddresses {
 		return NonInclusion, nil
+	} else if hasInsertionInputs {
+		return Insertion, nil
 	}
 	return "", fmt.Errorf("unknown schema")
 }

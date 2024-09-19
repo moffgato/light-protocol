@@ -52,5 +52,13 @@ func ImportCombinedSetup(inclusionTreeDepth uint32, inclusionNumberOfCompressedA
 		return nil, err
 	}
 
-	return &ProvingSystem{inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts, pk, vk, ccs}, nil
+	return &ProvingSystem{
+		InclusionTreeDepth:                     inclusionTreeDepth,
+		InclusionNumberOfCompressedAccounts:    inclusionNumberOfCompressedAccounts,
+		NonInclusionTreeDepth:                  nonInclusionTreeDepth,
+		NonInclusionNumberOfCompressedAccounts: nonInclusionNumberOfCompressedAccounts,
+		ProvingKey:                             pk,
+		VerifyingKey:                           vk,
+		ConstraintSystem:                       ccs,
+	}, nil
 }

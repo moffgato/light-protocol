@@ -123,6 +123,8 @@ func (handler proveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var circuitType prover.CircuitType
+	var proof *prover.Proof
+	var proofError *Error
 
 	circuitType, err = prover.ParseCircuitType(buf)
 	if err != nil {
@@ -132,16 +134,17 @@ func (handler proveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var proof *prover.Proof
-	var proofError *Error
-	if circuitType == prover.Inclusion {
+	switch circuitType {
+	case prover.Inclusion:
 		proof, proofError = handler.inclusionProof(buf)
-	}
-	if circuitType == prover.NonInclusion {
+	case prover.NonInclusion:
 		proof, proofError = handler.nonInclusionProof(buf)
-	}
-	if circuitType == prover.Combined {
+	case prover.Combined:
 		proof, proofError = handler.combinedProof(buf)
+	case prover.Insertion:
+		proof, proofError = handler.insertionProof(buf)
+	default:
+		proofError = malformedBodyError(fmt.Errorf("unknown circuit type"))
 	}
 
 	if proofError != nil {
@@ -164,6 +167,39 @@ func (handler proveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logging.Logger().Err(err)
 	}
+}
+
+func (handler proveHandler) insertionProof(buf []byte) (*prover.Proof, *Error) {
+	var params prover.InsertionParameters
+	err := json.Unmarshal(buf, &params)
+	if err != nil {
+		logging.Logger().Info().Msg("error Unmarshal")
+		logging.Logger().Info().Msg(err.Error())
+		return nil, malformedBodyError(err)
+	}
+
+	batchSize := uint32(len(params.Leaves))
+	fmt.Println("batchSize = ", batchSize)
+
+	var ps *prover.ProvingSystem
+	for _, provingSystem := range handler.provingSystem {
+		fmt.Println(provingSystem.BatchSize, provingSystem.Depth)
+		if provingSystem.BatchSize == batchSize {
+			ps = provingSystem
+			break
+		}
+	}
+
+	if ps == nil {
+		return nil, provingError(fmt.Errorf("no proving system for batch size %d", batchSize))
+	}
+
+	proof, err := ps.ProveInsertion(&params)
+	if err != nil {
+		logging.Logger().Err(err)
+		return nil, provingError(err)
+	}
+	return proof, nil
 }
 
 func (handler proveHandler) inclusionProof(buf []byte) (*prover.Proof, *Error) {

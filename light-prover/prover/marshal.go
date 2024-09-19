@@ -97,32 +97,23 @@ func (ps *ProvingSystem) WriteTo(w io.Writer) (int64, error) {
 	var totalWritten int64 = 0
 	var intBuf [4]byte
 
-	binary.BigEndian.PutUint32(intBuf[:], uint32(ps.InclusionTreeDepth))
-	written, err := w.Write(intBuf[:])
-	totalWritten += int64(written)
-	if err != nil {
-		return totalWritten, err
+	fieldsToWrite := []uint32{
+		ps.InclusionTreeDepth,
+		ps.InclusionNumberOfCompressedAccounts,
+		ps.NonInclusionTreeDepth,
+		ps.NonInclusionNumberOfCompressedAccounts,
+		ps.Depth,
+		ps.BatchSize,
 	}
 
-	binary.BigEndian.PutUint32(intBuf[:], uint32(ps.InclusionNumberOfCompressedAccounts))
-	written, err = w.Write(intBuf[:])
-	totalWritten += int64(written)
-	if err != nil {
-		return totalWritten, err
-	}
-
-	binary.BigEndian.PutUint32(intBuf[:], uint32(ps.NonInclusionTreeDepth))
-	written, err = w.Write(intBuf[:])
-	totalWritten += int64(written)
-	if err != nil {
-		return totalWritten, err
-	}
-
-	binary.BigEndian.PutUint32(intBuf[:], uint32(ps.NonInclusionNumberOfCompressedAccounts))
-	written, err = w.Write(intBuf[:])
-	totalWritten += int64(written)
-	if err != nil {
-		return totalWritten, err
+	for _, field := range fieldsToWrite {
+		binary.BigEndian.PutUint32(intBuf[:], field)
+		written, err := w.Write(intBuf[:])
+		totalWritten += int64(written)
+		fmt.Println("WriteTo", field, written, totalWritten)
+		if err != nil {
+			return totalWritten, err
+		}
 	}
 
 	keyWritten, err := ps.ProvingKey.WriteTo(w)
@@ -150,33 +141,24 @@ func (ps *ProvingSystem) UnsafeReadFrom(r io.Reader) (int64, error) {
 	var totalRead int64 = 0
 	var intBuf [4]byte
 
-	read, err := io.ReadFull(r, intBuf[:])
-	totalRead += int64(read)
-	if err != nil {
-		return totalRead, err
+	fieldsToRead := []*uint32{
+		&ps.InclusionTreeDepth,
+		&ps.InclusionNumberOfCompressedAccounts,
+		&ps.NonInclusionTreeDepth,
+		&ps.NonInclusionNumberOfCompressedAccounts,
+		&ps.Depth,
+		&ps.BatchSize,
 	}
-	ps.InclusionTreeDepth = binary.BigEndian.Uint32(intBuf[:])
 
-	read, err = io.ReadFull(r, intBuf[:])
-	totalRead += int64(read)
-	if err != nil {
-		return totalRead, err
+	for _, field := range fieldsToRead {
+		read, err := io.ReadFull(r, intBuf[:])
+		totalRead += int64(read)
+		if err != nil {
+			return totalRead, err
+		}
+		*field = binary.BigEndian.Uint32(intBuf[:])
+		fmt.Println("UnsafeReadFrom", *field, read, totalRead)
 	}
-	ps.InclusionNumberOfCompressedAccounts = binary.BigEndian.Uint32(intBuf[:])
-
-	read, err = io.ReadFull(r, intBuf[:])
-	totalRead += int64(read)
-	if err != nil {
-		return totalRead, err
-	}
-	ps.NonInclusionTreeDepth = binary.BigEndian.Uint32(intBuf[:])
-
-	read, err = io.ReadFull(r, intBuf[:])
-	totalRead += int64(read)
-	if err != nil {
-		return totalRead, err
-	}
-	ps.NonInclusionNumberOfCompressedAccounts = binary.BigEndian.Uint32(intBuf[:])
 
 	ps.ProvingKey = groth16.NewProvingKey(ecc.BN254)
 	keyRead, err := ps.ProvingKey.UnsafeReadFrom(r)

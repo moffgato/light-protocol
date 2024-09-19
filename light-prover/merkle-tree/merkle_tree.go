@@ -228,3 +228,40 @@ func BuildTestNonInclusionTree(depth int, numberOfCompressedAccounts int, random
 		Inputs: inputs,
 	}
 }
+
+func BuildTestInsertionTree(depth int, batchSize int, random bool) prover.InsertionParameters {
+	tree := NewTree(depth)
+
+	var leaves []big.Int
+	var merkleProofs [][]big.Int
+
+	preRoot := tree.Root()
+
+	for i := 0; i < batchSize; i++ {
+		var leaf *big.Int
+		var pathIndex int
+
+		if random {
+			leaf, _ = poseidon.Hash([]*big.Int{big.NewInt(rand.Int63())})
+			pathIndex = rand.Intn(1 << depth)
+		} else {
+			leaf, _ = poseidon.Hash([]*big.Int{big.NewInt(int64(i + 1))})
+			pathIndex = i
+		}
+
+		proof := tree.Update(pathIndex, *leaf)
+
+		leaves = append(leaves, *leaf)
+		merkleProofs = append(merkleProofs, proof)
+	}
+
+	postRoot := tree.Root()
+
+	return prover.InsertionParameters{
+		PreRoot:      preRoot,
+		PostRoot:     postRoot,
+		StartIndex:   0,
+		Leaves:       leaves,
+		MerkleProofs: merkleProofs,
+	}
+}

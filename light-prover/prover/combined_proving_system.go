@@ -102,7 +102,15 @@ func SetupCombined(inclusionTreeDepth uint32, inclusionNumberOfCompressedAccount
 	if err != nil {
 		return nil, err
 	}
-	return &ProvingSystem{inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts, pk, vk, ccs}, nil
+	return &ProvingSystem{
+		InclusionTreeDepth:                     inclusionTreeDepth,
+		InclusionNumberOfCompressedAccounts:    inclusionNumberOfCompressedAccounts,
+		NonInclusionTreeDepth:                  nonInclusionTreeDepth,
+		NonInclusionNumberOfCompressedAccounts: nonInclusionNumberOfCompressedAccounts,
+		ProvingKey:                             pk,
+		VerifyingKey:                           vk,
+		ConstraintSystem:                       ccs}, nil
+
 }
 
 func (ps *ProvingSystem) ProveCombined(params *CombinedParameters) (*Proof, error) {
