@@ -31,21 +31,24 @@ func StartServer() {
 	logging.Logger().Info().Msg("Setting up the prover")
 
 	fmt.Println("Starting test server")
-	var circuitTypes = []prover.CircuitType{prover.Inclusion, prover.NonInclusion, prover.Combined, prover.Insertion}
+	var circuitTypes = []prover.CircuitType{prover.Inclusion, prover.NonInclusion, prover.Combined, prover.Insertion, prover.Update}
 	var keys = prover.GetKeys("./proving-keys/", circuitTypes)
 	var pss = make([]*prover.ProvingSystem, len(keys))
 
 	fmt.Println("StartServer: keys loaded: ", keys)
 	for i, key := range keys {
-		// Another way to instantiate the circuit: prover.SetupInclusion(Depth, NumberOfCompressedAccounts)
-		// But we need to know the tree depth and the number of compressed accounts
+		logging.Logger().Info().Str("key", key).Msg("Loading proving system")
 		ps, err := prover.ReadSystemFromFile(key)
 		if err != nil {
+			logging.Logger().Error().Err(err).Str("key", key).Msg("Failed to load proving system")
 			panic(err)
 		}
-
-		fmt.Println("ps = ", ps.BatchSize, ps.Depth)
 		pss[i] = ps
+		logging.Logger().Info().
+			Uint32("treeDepth", ps.UpdateDepth).
+			Uint32("batchSize", ps.UpdateBatchSize).
+			Str("key", key).
+			Msg("Loaded proving system")
 	}
 
 	serverCfg := server.Config{
@@ -526,6 +529,158 @@ func TestParsingInsertionInput(t *testing.T) {
 		for j, element := range proof {
 			if element.Cmp(&insertionParams.MerkleProofs[i][j]) != 0 {
 				t.Errorf("Invalid Merkle proof element at index [%d][%d]: expected %s, got %s", i, j, insertionParams.MerkleProofs[i][j].Text(16), element.Text(16))
+			}
+		}
+	}
+}
+
+func TestBatchUpdateHappyPath26_1(t *testing.T) {
+	batchUpdateParams := merkletree.BuildTestBatchUpdateTree(26, 1)
+	jsonBytes, err := json.Marshal(batchUpdateParams)
+	fmt.Println(string(jsonBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := http.Post(proveEndpoint(), "application/json", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Expected status code %d, got %d. Response body: %s", http.StatusOK, response.StatusCode, string(body))
+	}
+}
+
+func TestBatchUpdateHappyPath26_8(t *testing.T) {
+	batchUpdateParams := merkletree.BuildTestBatchUpdateTree(26, 8)
+
+	fmt.Printf("Debug - BatchUpdateParameters:\n")
+	fmt.Printf("PreRoot: %s\n", batchUpdateParams.PreRoot.String())
+	fmt.Printf("PostRoot: %s\n", batchUpdateParams.PostRoot.String())
+	fmt.Printf("StartIndex: %d\n", batchUpdateParams.StartIndex)
+	fmt.Printf("OldLeaves: %v\n", batchUpdateParams.OldLeaves)
+	fmt.Printf("NewLeaves: %v\n", batchUpdateParams.NewLeaves)
+	fmt.Printf("MerkleProofs length: %d\n", len(batchUpdateParams.MerkleProofs))
+
+	jsonBytes, err := batchUpdateParams.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := http.Post(proveEndpoint(), "application/json", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, string(body))
+	}
+}
+
+func TestBatchUpdateWrongPreRoot(t *testing.T) {
+	batchUpdateParams := merkletree.BuildTestBatchUpdateTree(26, 1)
+
+	// Modify the pre-root to be incorrect
+	incorrectPreRoot := big.NewInt(0)
+	batchUpdateParams.PreRoot = *incorrectPreRoot
+
+	jsonBytes, err := batchUpdateParams.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := http.Post(proveEndpoint(), "application/json", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if response.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("Expected status code %d, got %d. Response body: %s", http.StatusBadRequest, response.StatusCode, string(body))
+	}
+}
+
+func TestBatchUpdateWrongMerkleProof(t *testing.T) {
+	batchUpdateParams := merkletree.BuildTestBatchUpdateTree(26, 1)
+
+	// Modify the Merkle proof to be incorrect
+	for i := range batchUpdateParams.MerkleProofs {
+		for j := range batchUpdateParams.MerkleProofs[i] {
+			batchUpdateParams.MerkleProofs[i][j] = *big.NewInt(1) // Set all elements to 1 instead of the correct value
+		}
+	}
+
+	jsonBytes, err := batchUpdateParams.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := http.Post(proveEndpoint(), "application/json", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected status code %d, got %d", http.StatusBadRequest, response.StatusCode)
+	}
+}
+
+func TestParsingBatchUpdateInput(t *testing.T) {
+	batchUpdateParams := merkletree.BuildTestBatchUpdateTree(26, 1)
+	jsonBytes, err := batchUpdateParams.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var parsedParams prover.BatchUpdateParameters
+	err = json.Unmarshal(jsonBytes, &parsedParams)
+	if err != nil {
+		t.Errorf("error parsing input: %v", err)
+	}
+
+	if parsedParams.PreRoot.Cmp(&batchUpdateParams.PreRoot) != 0 {
+		t.Errorf("Invalid preRoot: expected %s, got %s", batchUpdateParams.PreRoot.Text(16), parsedParams.PreRoot.Text(16))
+	}
+
+	if parsedParams.PostRoot.Cmp(&batchUpdateParams.PostRoot) != 0 {
+		t.Errorf("Invalid postRoot: expected %s, got %s", batchUpdateParams.PostRoot.Text(16), parsedParams.PostRoot.Text(16))
+	}
+
+	if parsedParams.StartIndex != batchUpdateParams.StartIndex {
+		t.Errorf("Invalid startIndex: expected %d, got %d", batchUpdateParams.StartIndex, parsedParams.StartIndex)
+	}
+
+	if len(parsedParams.OldLeaves) != len(batchUpdateParams.OldLeaves) {
+		t.Errorf("Invalid number of old leaves: expected %d, got %d", len(batchUpdateParams.OldLeaves), len(parsedParams.OldLeaves))
+	}
+
+	if len(parsedParams.NewLeaves) != len(batchUpdateParams.NewLeaves) {
+		t.Errorf("Invalid number of new leaves: expected %d, got %d", len(batchUpdateParams.NewLeaves), len(parsedParams.NewLeaves))
+	}
+
+	for i, leaf := range parsedParams.OldLeaves {
+		if leaf.Cmp(&batchUpdateParams.OldLeaves[i]) != 0 {
+			t.Errorf("Invalid old leaf at index %d: expected %s, got %s", i, batchUpdateParams.OldLeaves[i].Text(16), leaf.Text(16))
+		}
+	}
+
+	for i, leaf := range parsedParams.NewLeaves {
+		if leaf.Cmp(&batchUpdateParams.NewLeaves[i]) != 0 {
+			t.Errorf("Invalid new leaf at index %d: expected %s, got %s", i, batchUpdateParams.NewLeaves[i].Text(16), leaf.Text(16))
+		}
+	}
+
+	if len(parsedParams.MerkleProofs) != len(batchUpdateParams.MerkleProofs) {
+		t.Errorf("Invalid number of Merkle proofs: expected %d, got %d", len(batchUpdateParams.MerkleProofs), len(parsedParams.MerkleProofs))
+	}
+
+	for i, proof := range parsedParams.MerkleProofs {
+		if len(proof) != len(batchUpdateParams.MerkleProofs[i]) {
+			t.Errorf("Invalid Merkle proof length at index %d: expected %d, got %d", i, len(batchUpdateParams.MerkleProofs[i]), len(proof))
+		}
+		for j, element := range proof {
+			if element.Cmp(&batchUpdateParams.MerkleProofs[i][j]) != 0 {
+				t.Errorf("Invalid Merkle proof element at index [%d][%d]: expected %s, got %s", i, j, batchUpdateParams.MerkleProofs[i][j].Text(16), element.Text(16))
 			}
 		}
 	}

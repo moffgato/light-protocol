@@ -102,15 +102,28 @@ func (ps *ProvingSystem) WriteTo(w io.Writer) (int64, error) {
 		ps.InclusionNumberOfCompressedAccounts,
 		ps.NonInclusionTreeDepth,
 		ps.NonInclusionNumberOfCompressedAccounts,
-		ps.Depth,
-		ps.BatchSize,
+		ps.InsertionDepth,
+		ps.InsertionBatchSize,
+		ps.UpdateDepth,
+		ps.UpdateBatchSize,
 	}
 
-	for _, field := range fieldsToWrite {
+	fieldNames := []string{
+		"InclusionTreeDepth",
+		"InclusionNumberOfCompressedAccounts",
+		"NonInclusionTreeDepth",
+		"NonInclusionNumberOfCompressedAccounts",
+		"InsertionDepth",
+		"InsertionBatchSize",
+		"UpdateDepth",
+		"UpdateBatchSize",
+	}
+
+	for i, field := range fieldsToWrite {
 		binary.BigEndian.PutUint32(intBuf[:], field)
 		written, err := w.Write(intBuf[:])
 		totalWritten += int64(written)
-		fmt.Println("WriteTo", field, written, totalWritten)
+		fmt.Printf("WriteTo %s: %d (bytes written: %d, total: %d)\n", fieldNames[i], field, written, totalWritten)
 		if err != nil {
 			return totalWritten, err
 		}
@@ -146,18 +159,31 @@ func (ps *ProvingSystem) UnsafeReadFrom(r io.Reader) (int64, error) {
 		&ps.InclusionNumberOfCompressedAccounts,
 		&ps.NonInclusionTreeDepth,
 		&ps.NonInclusionNumberOfCompressedAccounts,
-		&ps.Depth,
-		&ps.BatchSize,
+		&ps.InsertionDepth,
+		&ps.InsertionBatchSize,
+		&ps.UpdateDepth,
+		&ps.UpdateBatchSize,
 	}
 
-	for _, field := range fieldsToRead {
+	fieldNames := []string{
+		"InclusionTreeDepth",
+		"InclusionNumberOfCompressedAccounts",
+		"NonInclusionTreeDepth",
+		"NonInclusionNumberOfCompressedAccounts",
+		"InsertionDepth",
+		"InsertionBatchSize",
+		"UpdateDepth",
+		"UpdateBatchSize",
+	}
+
+	for i, field := range fieldsToRead {
 		read, err := io.ReadFull(r, intBuf[:])
 		totalRead += int64(read)
 		if err != nil {
-			return totalRead, err
+			return totalRead, fmt.Errorf("error reading field %s: %v", fieldNames[i], err)
 		}
 		*field = binary.BigEndian.Uint32(intBuf[:])
-		fmt.Println("UnsafeReadFrom", *field, read, totalRead)
+		fmt.Printf("UnsafeReadFrom %s: %d (bytes read: %d, total: %d)\n", fieldNames[i], *field, read, totalRead)
 	}
 
 	ps.ProvingKey = groth16.NewProvingKey(ecc.BN254)
@@ -188,7 +214,7 @@ func ReadSystemFromFile(path string) (ps *ProvingSystem, err error) {
 	ps = new(ProvingSystem)
 	file, err := os.Open(path)
 	if err != nil {
-		return
+		return nil, fmt.Errorf("failed to open file %s: %v", path, err)
 	}
 
 	defer func() {
@@ -200,7 +226,7 @@ func ReadSystemFromFile(path string) (ps *ProvingSystem, err error) {
 
 	_, err = ps.UnsafeReadFrom(file)
 	if err != nil {
-		return
+		return nil, fmt.Errorf("failed to read from file %s: %v", path, err)
 	}
 	return
 }

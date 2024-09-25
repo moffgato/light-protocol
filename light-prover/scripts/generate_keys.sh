@@ -8,14 +8,18 @@ gnark() {
 }
 
 generate() {
-    local INSERTION_BATCH_SIZE=$1
-    local INCLUSION_COMPRESSED_ACCOUNTS=$2
-    local NON_INCLUSION_COMPRESSED_ACCOUNTS=$3
-    local CIRCUIT_TYPE=$4
+    local UPDATE_BATCH_SIZE=$1
+    local INSERTION_BATCH_SIZE=$2
+    local INCLUSION_COMPRESSED_ACCOUNTS=$3
+    local NON_INCLUSION_COMPRESSED_ACCOUNTS=$4
+    local CIRCUIT_TYPE=$5
     mkdir -p circuits
     if [ "$CIRCUIT_TYPE" == "insertion" ]; then
             COMPRESSED_ACCOUNTS=$INSERTION_BATCH_SIZE
             CIRCUIT_TYPE_RS="insertion"
+    elif [ "$CIRCUIT_TYPE" == "update" ]; then
+            COMPRESSED_ACCOUNTS=$UPDATE_BATCH_SIZE
+            CIRCUIT_TYPE_RS="update"
     elif [ "$CIRCUIT_TYPE" == "inclusion" ]; then
         COMPRESSED_ACCOUNTS=$INCLUSION_COMPRESSED_ACCOUNTS
         CIRCUIT_TYPE_RS="inclusion"
@@ -40,6 +44,8 @@ generate() {
       --non-inclusion-tree-depth ${DEPTH} \
       --insertion-batch-size ${INSERTION_BATCH_SIZE} \
       --insertion-tree-depth ${DEPTH} \
+      --update-batch-size ${UPDATE_BATCH_SIZE} \
+      --update-tree-depth ${DEPTH} \
       --output ${CIRCUIT_FILE} \
       --output-vkey ${CIRCUIT_VKEY_FILE}"
 
@@ -51,29 +57,37 @@ generate() {
       --non-inclusion-tree-depth "$DEPTH" \
       --insertion-batch-size "$INSERTION_BATCH_SIZE" \
       --insertion-tree-depth "$DEPTH" \
+      --update-batch-size "$UPDATE_BATCH_SIZE" \
+      --update-tree-depth "$DEPTH" \
       --output "${CIRCUIT_FILE}" \
       --output-vkey "${CIRCUIT_VKEY_FILE}"
     cargo xtask generate-vkey-rs --input-path "${CIRCUIT_VKEY_FILE}" --output-path "${CIRCUIT_VKEY_RS_FILE}"
 }
 
+declare -a update_batch_sizes_arr=("1" "2" "4" "8")
+for batch_size in "${update_batch_sizes_arr[@]}"
+do
+    generate "$batch_size" "0" "0" "0" "update"
+done
+
 declare -a insertion_batch_sizes_arr=("1" "2" "4" "8")
 for batch_size in "${insertion_batch_sizes_arr[@]}"
 do
-    generate "$batch_size" "0" "0" "insertion"
+    generate "0" "$batch_size" "0" "0" "insertion"
 done
 
 declare -a inclusion_compressed_accounts_arr=("1" "2" "3" "4" "8")
 
 for compressed_accounts in "${inclusion_compressed_accounts_arr[@]}"
 do
-   generate "0" "$compressed_accounts" "0" "inclusion"
+   generate "0" "0" "$compressed_accounts" "0" "inclusion"
 done
 
 declare -a non_inclusion_compressed_accounts_arr=("1" "2")
 
 for compressed_accounts in "${non_inclusion_compressed_accounts_arr[@]}"
 do
-   generate "0" "0" "$compressed_accounts" "non-inclusion"
+   generate "0" "0" "0" "$compressed_accounts" "non-inclusion"
 done
 
 declare -a combined_inclusion_compressed_accounts_arr=("1" "2" "3" "4")
@@ -83,6 +97,6 @@ for i_compressed_accounts in "${combined_inclusion_compressed_accounts_arr[@]}"
 do
  for ni_compressed_accounts in "${combined_non_inclusion_compressed_accounts_arr[@]}"
  do
-   generate "0" "$i_compressed_accounts" "$ni_compressed_accounts" "combined"
+   generate "0" "0" "$i_compressed_accounts" "$ni_compressed_accounts" "combined"
  done
 done

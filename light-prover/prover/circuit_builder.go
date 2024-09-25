@@ -12,6 +12,7 @@ const (
 	Inclusion    CircuitType = "inclusion"
 	NonInclusion CircuitType = "non-inclusion"
 	Insertion    CircuitType = "insertion"
+	Update       CircuitType = "update"
 )
 
 func SetupCircuit(
@@ -22,6 +23,8 @@ func SetupCircuit(
 	nonInclusionNumberOfCompressedAccounts uint32,
 	insertionTreeDepth uint32,
 	insertionBatchSize uint32,
+	updateTreeDepth uint32,
+	updateBatchSize uint32,
 ) (*ProvingSystem, error) {
 	switch circuit {
 	case Inclusion:
@@ -32,6 +35,8 @@ func SetupCircuit(
 		return SetupCombined(inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts)
 	case Insertion:
 		return SetupInsertion(insertionTreeDepth, insertionBatchSize)
+	case Update:
+		return SetupBatchUpdate(updateTreeDepth, updateBatchSize)
 	default:
 		return nil, fmt.Errorf("invalid circuit: %s", circuit)
 	}
@@ -47,6 +52,7 @@ func ParseCircuitType(data []byte) (CircuitType, error) {
 	_, hasInputCompressedAccounts := inputs["input-compressed-accounts"]
 	_, hasNewAddresses := inputs["new-addresses"]
 	_, hasInsertionInputs := inputs["insertion-inputs"]
+	_, hasUpdateInputs := inputs["batch-update-inputs"]
 
 	if hasInputCompressedAccounts && hasNewAddresses {
 		return Combined, nil
@@ -56,6 +62,8 @@ func ParseCircuitType(data []byte) (CircuitType, error) {
 		return NonInclusion, nil
 	} else if hasInsertionInputs {
 		return Insertion, nil
+	} else if hasUpdateInputs {
+		return Update, nil
 	}
 	return "", fmt.Errorf("unknown schema")
 }

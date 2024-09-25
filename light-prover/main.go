@@ -32,7 +32,7 @@ func runCli() {
 			{
 				Name: "setup",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "circuit", Usage: "Type of circuit (\"inclusion\" / \"non-inclusion\" / \"combined\" / \"insertion\" )", Required: true},
+					&cli.StringFlag{Name: "circuit", Usage: "Type of circuit (\"inclusion\" / \"non-inclusion\" / \"combined\" / \"insertion\" / \"update\")", Required: true},
 					&cli.StringFlag{Name: "output", Usage: "Output file", Required: true},
 					&cli.StringFlag{Name: "output-vkey", Usage: "Output file", Required: true},
 					&cli.UintFlag{Name: "inclusion-tree-depth", Usage: "Merkle tree depth", Required: false},
@@ -41,10 +41,12 @@ func runCli() {
 					&cli.UintFlag{Name: "non-inclusion-compressed-accounts", Usage: "Non-inclusion number of compressed accounts", Required: false},
 					&cli.UintFlag{Name: "insertion-tree-depth", Usage: "Insertion merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "insertion-batch-size", Usage: "Insertion batch size", Required: false},
+					&cli.UintFlag{Name: "update-tree-depth", Usage: "Update merkle tree depth", Required: false},
+					&cli.UintFlag{Name: "update-batch-size", Usage: "Update batch size", Required: false},
 				},
 				Action: func(context *cli.Context) error {
 					circuit := prover.CircuitType(context.String("circuit"))
-					if circuit != prover.Inclusion && circuit != prover.NonInclusion && circuit != prover.Combined && circuit != prover.Insertion {
+					if circuit != prover.Inclusion && circuit != prover.NonInclusion && circuit != prover.Combined && circuit != prover.Insertion && circuit != prover.Update {
 						return fmt.Errorf("invalid circuit type %s", circuit)
 					}
 
@@ -56,6 +58,8 @@ func runCli() {
 					nonInclusionNumberOfCompressedAccounts := uint32(context.Uint("non-inclusion-compressed-accounts"))
 					insertionTreeDepth := uint32(context.Uint("insertion-tree-depth"))
 					insertionBatchSize := uint32(context.Uint("insertion-batch-size"))
+					updateTreeDepth := uint32(context.Uint("update-tree-depth"))
+					updateBatchSize := uint32(context.Uint("update-batch-size"))
 
 					if (inclusionTreeDepth == 0 || inclusionNumberOfCompressedAccounts == 0) && circuit == prover.Inclusion {
 						return fmt.Errorf("inclusion tree depth and number of compressed accounts must be provided")
@@ -77,6 +81,9 @@ func runCli() {
 					if (insertionTreeDepth == 0 || insertionBatchSize == 0) && circuit == prover.Insertion {
 						return fmt.Errorf("insertion tree depth and batch size must be provided")
 					}
+					if (updateTreeDepth == 0 || updateBatchSize == 0) && circuit == prover.Update {
+						return fmt.Errorf("update tree depth and batch size must be provided")
+					}
 
 					logging.Logger().Info().Msg("Running setup")
 
@@ -84,7 +91,7 @@ func runCli() {
 					var err error
 
 					logging.Logger().Info().Msg("Calling prover.SetupCircuit")
-					system, err = prover.SetupCircuit(circuit, inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts, insertionTreeDepth, insertionBatchSize)
+					system, err = prover.SetupCircuit(circuit, inclusionTreeDepth, inclusionNumberOfCompressedAccounts, nonInclusionTreeDepth, nonInclusionNumberOfCompressedAccounts, insertionTreeDepth, insertionBatchSize, updateTreeDepth, updateBatchSize)
 					logging.Logger().Info().Msg("Called prover.SetupCircuit")
 					if err != nil {
 						return err
@@ -217,6 +224,8 @@ func runCli() {
 					&cli.UintFlag{Name: "non-inclusion-compressed-accounts", Usage: "Non-inclusion number of compressed accounts", Required: false},
 					&cli.UintFlag{Name: "insertion-tree-depth", Usage: "Insertion merkle tree depth", Required: false},
 					&cli.UintFlag{Name: "insertion-batch-size", Usage: "Insertion batch size", Required: false},
+					&cli.UintFlag{Name: "update-tree-depth", Usage: "Update merkle tree depth", Required: false},
+					&cli.UintFlag{Name: "update-batch-size", Usage: "Update batch size", Required: false},
 				},
 				Action: func(context *cli.Context) error {
 					circuit := context.String("circuit")
@@ -234,6 +243,8 @@ func runCli() {
 					nonInclusionNumberOfCompressedAccounts := uint32(context.Uint("non-inclusion-compressed-accounts"))
 					insertionTreeDepth := uint32(context.Uint("insertion-tree-depth"))
 					insertionBatchSize := uint32(context.Uint("insertion-batch-size"))
+					updateTreeDepth := uint32(context.Uint("update-tree-depth"))
+					updateBatchSize := uint32(context.Uint("update-batch-size"))
 
 					if (inclusionTreeDepth == 0 || inclusionNumberOfCompressedAccounts == 0) && circuit == "inclusion" {
 						return fmt.Errorf("inclusion tree depth and number of compressed accounts must be provided")
@@ -256,6 +267,10 @@ func runCli() {
 						return fmt.Errorf("insertion tree depth and batch size must be provided")
 					}
 
+					if (updateTreeDepth == 0 || updateBatchSize == 0) && circuit == "update" {
+						return fmt.Errorf("insertion tree depth and batch size must be provided")
+					}
+
 					var system *prover.ProvingSystem
 					var err error
 
@@ -263,6 +278,8 @@ func runCli() {
 
 					if circuit == "insertion" {
 						system, err = prover.ImportInsertionSetup(insertionTreeDepth, insertionBatchSize, pk, vk)
+					} else if circuit == "update" {
+						system, err = prover.ImportBatchUpdateSetup(updateTreeDepth, updateBatchSize, pk, vk)
 					} else if circuit == "inclusion" {
 						system, err = prover.ImportInclusionSetup(inclusionTreeDepth, inclusionNumberOfCompressedAccounts, pk, vk)
 					} else if circuit == "non-inclusion" {
@@ -394,6 +411,7 @@ func runCli() {
 					&cli.BoolFlag{Name: "inclusion", Usage: "Run inclusion circuit", Required: true},
 					&cli.BoolFlag{Name: "non-inclusion", Usage: "Run non-inclusion circuit", Required: false},
 					&cli.BoolFlag{Name: "insertion", Usage: "Run insertion circuit", Required: false},
+					&cli.BoolFlag{Name: "update", Usage: "Run batch update circuit", Required: false},
 					&cli.StringFlag{Name: "keys-dir", Usage: "Directory where circuit key files are stored", Value: "./proving-keys/", Required: false},
 					&cli.StringSliceFlag{Name: "keys-file", Aliases: []string{"k"}, Value: cli.NewStringSlice(), Usage: "Proving system file"},
 				},
@@ -481,7 +499,7 @@ func runCli() {
 						}
 
 						for _, provingSystem := range ps {
-							if provingSystem.Depth == params.TreeDepth() && provingSystem.BatchSize == params.BatchSize() {
+							if provingSystem.InsertionDepth == params.TreeDepth() && provingSystem.InsertionBatchSize == params.BatchSize() {
 								proof, err = provingSystem.ProveInsertion(&params)
 								if err != nil {
 									return err
@@ -491,8 +509,25 @@ func runCli() {
 								break
 							}
 						}
-					}
+					} else if context.Bool("update") {
+						var params prover.BatchUpdateParameters
+						err = json.Unmarshal(inputsBytes, &params)
+						if err != nil {
+							return err
+						}
 
+						for _, provingSystem := range ps {
+							if provingSystem.UpdateDepth == params.TreeDepth() && provingSystem.UpdateBatchSize == params.BatchSize() {
+								proof, err = provingSystem.ProveBatchUpdate(&params)
+								if err != nil {
+									return err
+								}
+								r, _ := json.Marshal(&proof)
+								fmt.Println(string(r))
+								break
+							}
+						}
+					}
 					return nil
 				},
 			},
@@ -518,7 +553,7 @@ func runCli() {
 						roots[i] = *val
 					}
 
-					leafInputString := context.String("leafs")
+					leafInputString := context.String("leaves")
 					leafStrings := strings.Split(leafInputString, ",")
 					leafs := make([]big.Int, len(leafStrings))
 
@@ -621,8 +656,10 @@ func LoadKeys(context *cli.Context) ([]*prover.ProvingSystem, error) {
 			Uint32("compressedAccounts", ps.InclusionNumberOfCompressedAccounts).
 			Uint32("nonInclusionTreeDepth", ps.NonInclusionTreeDepth).
 			Uint32("nonInclusionCompressedAccounts", ps.NonInclusionNumberOfCompressedAccounts).
-			Uint32("insertionTreeDepth", ps.Depth).
-			Uint32("insertionBatchSize", ps.BatchSize).
+			Uint32("insertionTreeDepth", ps.InsertionDepth).
+			Uint32("insertionBatchSize", ps.InsertionBatchSize).
+			Uint32("updateTreeDepth", ps.UpdateDepth).
+			Uint32("updateBatchSize", ps.UpdateBatchSize).
 			Msg("Read proving system")
 	}
 	return pss, nil
@@ -633,6 +670,7 @@ func getKeysByArgs(context *cli.Context) ([]string, error) {
 	var inclusion = context.Bool("inclusion")
 	var nonInclusion = context.Bool("non-inclusion")
 	var insertion = context.Bool("insertion")
+	var update = context.Bool("update")
 	var circuitTypes []prover.CircuitType = make([]prover.CircuitType, 0)
 
 	if inclusion {
@@ -645,6 +683,10 @@ func getKeysByArgs(context *cli.Context) ([]string, error) {
 
 	if insertion {
 		circuitTypes = append(circuitTypes, prover.Insertion)
+	}
+
+	if update {
+		circuitTypes = append(circuitTypes, prover.Update)
 	}
 
 	if inclusion && nonInclusion {

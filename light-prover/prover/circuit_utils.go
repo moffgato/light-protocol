@@ -24,8 +24,10 @@ type ProvingSystem struct {
 	InclusionNumberOfCompressedAccounts    uint32
 	NonInclusionTreeDepth                  uint32
 	NonInclusionNumberOfCompressedAccounts uint32
-	Depth                                  uint32
-	BatchSize                              uint32
+	InsertionDepth                         uint32
+	InsertionBatchSize                     uint32
+	UpdateDepth                            uint32
+	UpdateBatchSize                        uint32
 	ProvingKey                             groth16.ProvingKey
 	VerifyingKey                           groth16.VerifyingKey
 	ConstraintSystem                       constraint.ConstraintSystem
@@ -123,14 +125,25 @@ type VerifyProof struct {
 }
 
 func (gadget VerifyProof) DefineGadget(api frontend.API) interface{} {
+	fmt.Printf("Debug - VerifyProof: Leaf: %v\n", gadget.Leaf)
+	fmt.Printf("Debug - VerifyProof: Path: %v\n", gadget.Path)
+	fmt.Printf("Debug - VerifyProof: Proof: %v\n", gadget.Proof)
+
 	currentHash := gadget.Leaf
 	for i := 0; i < len(gadget.Path); i++ {
+		left := api.Select(gadget.Path[i], currentHash, gadget.Proof[i])
+		right := api.Select(gadget.Path[i], gadget.Proof[i], currentHash)
+
 		currentHash = abstractor.Call(api, ProveParentHash{
 			Bit:     gadget.Path[i],
 			Hash:    currentHash,
 			Sibling: gadget.Proof[i],
 		})
+
+		fmt.Printf("Debug - VerifyProof: Step %d, Left: %v, Right: %v, Hash: %v\n", i, left, right, currentHash)
+
 	}
+	fmt.Printf("Debug - VerifyProof: Final Root: %v\n", currentHash)
 	return currentHash
 }
 
@@ -247,6 +260,13 @@ func GetKeys(keysDir string, circuitTypes []CircuitType) []string {
 		keys = append(keys, keysDir+"insertion_26_2.key")
 		keys = append(keys, keysDir+"insertion_26_4.key")
 		keys = append(keys, keysDir+"insertion_26_8.key")
+	}
+
+	if IsCircuitEnabled(circuitTypes, Update) {
+		keys = append(keys, keysDir+"update_26_1.key")
+		keys = append(keys, keysDir+"update_26_2.key")
+		keys = append(keys, keysDir+"update_26_4.key")
+		keys = append(keys, keysDir+"update_26_8.key")
 	}
 
 	fmt.Println("Loading keys...", keys)

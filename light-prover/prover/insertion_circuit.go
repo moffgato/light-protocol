@@ -104,11 +104,11 @@ func SetupInsertion(treeDepth uint32, batchSize uint32) (*ProvingSystem, error) 
 		return nil, err
 	}
 	return &ProvingSystem{
-		Depth:            treeDepth,
-		BatchSize:        batchSize,
-		ProvingKey:       pk,
-		VerifyingKey:     vk,
-		ConstraintSystem: ccs}, nil
+		InsertionDepth:     treeDepth,
+		InsertionBatchSize: batchSize,
+		ProvingKey:         pk,
+		VerifyingKey:       vk,
+		ConstraintSystem:   ccs}, nil
 }
 
 func ImportInsertionSetup(treeDepth uint32, batchSize uint32, pkPath string, vkPath string) (*ProvingSystem, error) {
@@ -146,11 +146,11 @@ func ImportInsertionSetup(treeDepth uint32, batchSize uint32, pkPath string, vkP
 	}
 
 	return &ProvingSystem{
-		Depth:            treeDepth,
-		BatchSize:        batchSize,
-		ProvingKey:       pk,
-		VerifyingKey:     vk,
-		ConstraintSystem: ccs,
+		InclusionTreeDepth: treeDepth,
+		InsertionBatchSize: batchSize,
+		ProvingKey:         pk,
+		VerifyingKey:       vk,
+		ConstraintSystem:   ccs,
 	}, nil
 }
 
@@ -166,7 +166,7 @@ func (ps *ProvingSystem) ProveInsertion(params *InsertionParameters) (*Proof, er
 		Int("MerkleProofsCount", len(params.MerkleProofs)).
 		Msg("Insertion parameters details")
 
-	if err := params.ValidateShape(ps.Depth, ps.BatchSize); err != nil {
+	if err := params.ValidateShape(ps.InsertionDepth, ps.InsertionBatchSize); err != nil {
 		return nil, err
 	}
 
@@ -194,8 +194,8 @@ func (ps *ProvingSystem) ProveInsertion(params *InsertionParameters) (*Proof, er
 		StartIndex:   startIndex,
 		Leaves:       leaves,
 		MerkleProofs: merkleProofs,
-		BatchSize:    ps.BatchSize,
-		Depth:        ps.Depth,
+		BatchSize:    ps.InsertionBatchSize,
+		Depth:        ps.InsertionDepth,
 	}
 
 	fmt.Println("3 ProveInsertion", assignment)
@@ -205,7 +205,7 @@ func (ps *ProvingSystem) ProveInsertion(params *InsertionParameters) (*Proof, er
 		return nil, err
 	}
 
-	logging.Logger().Info().Msg("Generating insertion proof " + strconv.Itoa(int(ps.Depth)) + " " + strconv.Itoa(int(ps.BatchSize)))
+	logging.Logger().Info().Msg("Generating insertion proof " + strconv.Itoa(int(ps.InsertionDepth)) + " " + strconv.Itoa(int(ps.InsertionBatchSize)))
 	proof, err := groth16.Prove(ps.ConstraintSystem, ps.ProvingKey, witness)
 	if err != nil {
 		return nil, err
